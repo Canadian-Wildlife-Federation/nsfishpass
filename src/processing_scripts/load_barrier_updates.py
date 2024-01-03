@@ -31,13 +31,14 @@ import appconfig
 iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbWatershedId = appconfig.config[iniSection]['watershed_id']
-# rawData = appconfig.config[iniSection]['barrier_updates']
+rawData = appconfig.config[iniSection]['barrier_updates']
 dataSchema = appconfig.config['DATABASE']['data_schema']
 
 dbTempTable = 'barrier_updates_' + dbWatershedId
 dbTargetTable = appconfig.config['BARRIER_PROCESSING']['barrier_updates_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
+dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
 joinDistance = appconfig.config['CROSSINGS']['join_distance']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
@@ -71,14 +72,14 @@ def loadBarrierUpdates(connection):
         cursor.execute(query)
     connection.commit()
 
-    for species in specCodes:
-        code = species[0]
-        colname = "passability_status_" + code
-        query = f"""ALTER TABLE {dbTargetSchema}.{dbTargetTable} ALTER COLUMN {colname} TYPE numeric USING {colname}::numeric;
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(query)
-    connection.commit()
+    # for species in specCodes:
+    #     code = species[0]
+    #     colname = "passability_status_" + code
+    #     query = f"""ALTER TABLE {dbTargetSchema}.{dbTargetTable} ALTER COLUMN {colname} TYPE numeric USING {colname}::numeric;
+    #     """
+    #     with connection.cursor() as cursor:
+    #         cursor.execute(query)
+    # connection.commit()
 
 def joinBarrierUpdates(connection):
 
@@ -110,11 +111,11 @@ def joinBarrierUpdates(connection):
             CROSS JOIN LATERAL 
             (SELECT
                 id, 
-                ST_Distance(bar.snapped_point, foo.geometry) as dist
+                ST_Distance(bar.snapped_point, ST_Transform(foo.geometry, 2961)) as dist
                 FROM {dbTargetSchema}.{dbBarrierTable} AS bar
-                WHERE ST_DWithin(bar.snapped_point, foo.geometry, {joinDistance})
+                WHERE ST_DWithin(bar.snapped_point, ST_Transform(foo.geometry, 2961), {joinDistance})
                 AND bar.type = '{barrier}'
-                ORDER BY ST_Distance(bar.snapped_point, foo.geometry)
+                ORDER BY ST_Distance(bar.snapped_point, ST_Transform(foo.geometry, 2961))
                 LIMIT 1
             ) AS closest_point
             WHERE foo.barrier_type = '{barrier}'
@@ -146,17 +147,17 @@ def processUpdates(connection):
                 # update most fields
                 cursor.execute(mappingQuery)
                 # update species-specific passability fields
-                for species in specCodes:
-                    code = species[0]
-                    colname = "passability_status_" + code
-                    passabilityQuery = f"""
-                        UPDATE {dbTargetSchema}.{dbBarrierTable} AS b
-                        SET {colname} = CASE WHEN a.{colname} IS NOT NULL THEN a.{colname} ELSE b.{colname} END
-                        FROM {dbTargetSchema}.{dbTargetTable} AS a
-                        WHERE b.id = a.barrier_id
-                        AND a.update_status = 'ready';
-                    """
-                    cursor.execute(passabilityQuery)
+                # for species in specCodes:
+                #     code = species[0]
+                #     colname = "passability_status_" + code
+                #     passabilityQuery = f"""
+                #         UPDATE {dbTargetSchema}.{dbBarrierTable} AS b
+                #         SET {colname} = CASE WHEN a.{colname} IS NOT NULL THEN a.{colname} ELSE b.{colname} END
+                #         FROM {dbTargetSchema}.{dbTargetTable} AS a
+                #         WHERE b.id = a.barrier_id
+                #         AND a.update_status = 'ready';
+                #     """
+                #     cursor.execute(passabilityQuery)
 
                 query = f"""
                     UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_status = 'ready';
@@ -190,31 +191,44 @@ def processUpdates(connection):
     with connection.cursor() as cursor:
         cursor.execute(initializeQuery)
 
-    newCols = []
-    for species in specCodes:
-        code = species[0]
-        col = "passability_status_" + code
-        newCols.append(col)
-    colString = ','.join(newCols)
+    # newCols = []
+    # for species in specCodes:
+    #     code = species[0]
+    #     col = "passability_status_" + code
+    #     newCols.append(col)
+    # colString = ','.join(newCols)
 
     mappingQuery = f"""
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
-            update_id, original_point, type,
-            {colString}, passability_status_notes,
-            culvert_number, structure_id, date_examined,
-            transport_feature_name, culvert_type,
-            culvert_condition, action_items
+            update_id, original_point, type, owner, 
+            stream_name, date_examined,
+            transport_feature_name
             )
         SELECT 
-            update_id, geometry, barrier_type,
-            {colString}, passability_status_notes,
-            culvert_number, structure_id, date_examined,
-            road, culvert_type,
-            culvert_condition, action_items
+            update_id, ST_Transform(geometry, 2961), barrier_type, ownership, 
+            stream_name, date_examined,
+            road_name
         FROM {dbTargetSchema}.{dbTargetTable}
         WHERE update_type = 'new feature'
         AND update_status = 'ready';
+
+        INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
+            barrier_id
+            ,species_id
+            ,passability_status
+        )
+        SELECT 
+            u.barrier_id
+            , (SELECT id
+                FROM {dbTargetSchema}.fish_species
+                WHERE code = 'as')
+            ,u.passability_status
+        FROM {dbTargetSchema}.{dbTargetTable} u
+        JOIN {dbTargetSchema}.{dbBarrierTable} b
+            ON b.update_id = u.update_id::varchar
+        WHERE u.update_type = 'new feature';
+
 
         UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
 
@@ -243,30 +257,41 @@ def processUpdates(connection):
 
         UPDATE {dbTargetSchema}.{dbBarrierTable} AS b
         SET
-            culvert_number = CASE WHEN a.culvert_number IS NOT NULL THEN a.culvert_number ELSE b.culvert_number END,
-            structure_id = CASE WHEN a.structure_id IS NOT NULL THEN a.structure_id ELSE b.structure_id END,
             date_examined = CASE WHEN a.date_examined IS NOT NULL THEN a.date_examined ELSE b.date_examined END,
-            transport_feature_name = CASE WHEN (a.road IS NOT NULL AND a.road IS DISTINCT FROM b.transport_feature_name) THEN a.road ELSE b.transport_feature_name END,
-            culvert_type = CASE WHEN a.culvert_type IS NOT NULL THEN a.culvert_type ELSE b.culvert_type END,
-            culvert_condition = CASE WHEN a.culvert_condition IS NOT NULL THEN a.culvert_condition ELSE b.culvert_condition END,
-            passability_status_notes =
-                CASE
-                WHEN a.passability_status_notes IS NOT NULL AND b.passability_status_notes IS NULL THEN a.passability_status_notes
-                WHEN a.passability_status_notes IS NOT NULL AND b.passability_status_notes IS NOT NULL THEN b.passability_status_notes || ';' || a.passability_status_notes
-                ELSE b.passability_status_notes END,
-            action_items = CASE WHEN a.action_items IS NOT NULL THEN a.action_items ELSE b.action_items END,
+            transport_feature_name = CASE WHEN (a.road_name IS NOT NULL AND a.road_name IS DISTINCT FROM b.transport_feature_name) THEN a.road_name ELSE b.transport_feature_name END,
             crossing_subtype = CASE WHEN a.crossing_subtype IS NOT NULL THEN a.crossing_subtype ELSE b.crossing_subtype END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE b.id = a.barrier_id
         AND a.update_status = 'ready';
+
+        UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
+        SET
+            passability_status = CASE WHEN a.passability_status IS NOT NULL AND a.passability_status IS DISTINCT FROM p.passability_status THEN a.passability_status ELSE p.passability_status END
+        FROM {dbTargetSchema}.{dbTargetTable} AS a
+        WHERE p.barrier_id = a.barrier_id
+        AND a.update_status = 'ready'
     """
 
     processMultiple(connection)
+
+    removeDuplicatesQuery = f"""
+        --delete duplicate points in a narrow tolerance
+        DELETE FROM {dbTargetSchema}.{dbBarrierTable} b1
+        WHERE EXISTS (SELECT FROM {dbTargetSchema}.{dbBarrierTable} b2
+            WHERE b1.id > b2.id
+            AND ST_DWithin(b1.snapped_point, b2.snapped_point, 1));
+    """
+    # print(removeDuplicatesQuery)
+    with connection.cursor() as cursor:
+        cursor.execute(removeDuplicatesQuery)
+    connection.commit()
 
 #--- main program ---
 def main():
         
     with appconfig.connectdb() as conn:
+
+        conn.autocommit = False
 
         query = f"""
         SELECT code
@@ -279,7 +304,8 @@ def main():
             cursor.execute(query)
             specCodes = cursor.fetchall()
         
-        conn.autocommit = False
+        conn.commit()
+        
 
         print("Loading Barrier Updates")
         loadBarrierUpdates(conn)

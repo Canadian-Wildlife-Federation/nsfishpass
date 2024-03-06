@@ -66,12 +66,13 @@ def main():
                 id uuid not null default gen_random_uuid()
                 ,code varchar(32)
                 ,common_name varchar(128)
+                ,mi_kmaw_name varchar(128)
                 
                 ,primary key (id)
             );
 
-            INSERT INTO {dbTargetSchema}.fish_species (code, common_name)
-            SELECT code, name FROM {appconfig.dataSchema}.{fishSpeciesTable};
+            INSERT INTO {dbTargetSchema}.fish_species (code, common_name, mi_kmaw_name)
+            SELECT code, name, mi_kmaw_name FROM {appconfig.dataSchema}.{fishSpeciesTable};
 
             ALTER TABLE {dbTargetSchema}.fish_species OWNER TO cwf_analyst;
         """

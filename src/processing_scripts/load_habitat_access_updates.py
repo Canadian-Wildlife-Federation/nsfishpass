@@ -42,7 +42,7 @@ def main():
         conn.commit()
 
         print("Loading habitat and accessibility updates")
-        layer = "hab_access_updates"
+        layer = "habitat_access_updates"
         orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
         pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt CONVERT_TO_LINEAR  -nln "' + dbTargetSchema + '.' + datatable + '" -lco GEOMETRY_NAME=geometry "' + file + '" ' + layer
         #print(pycmd)
@@ -55,7 +55,9 @@ def main():
         
         ALTER TABLE {dbTargetSchema}.{datatable} add column snapped_point geometry(POINT, {appconfig.dataSrid});
         
-        SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '{snapDistance}');
+        --SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '{snapDistance}');
+
+        SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '125');
 
         CREATE INDEX {datatable}_snapped_point_idx ON {dbTargetSchema}.{datatable} USING gist (snapped_point);
         
@@ -71,26 +73,6 @@ def main():
         SET stream_id = a.stream_id, stream_measure = a.streammeasure
         FROM match a WHERE a.pntid = {dbTargetSchema}.{datatable}.id;
 
-        """
-
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
-
-        # add comments to stream table
-        query = f"""
-            ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS "comments";
-            ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS "comments_source";
-            ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN "comments" varchar;
-            ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN "comments_source" varchar;
-
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
-            SET
-                "comments" = b.comments,
-                comments_source = b.update_source
-            FROM {dbTargetSchema}.{datatable} b
-            WHERE b.stream_id = a.id
-            AND b.update_type = 'comment';
         """
 
         with conn.cursor() as cursor:

@@ -37,6 +37,8 @@ dataSchema = appconfig.config['DATABASE']['data_schema']
 dbTempTable = 'barrier_updates_' + dbWatershedId
 dbTargetTable = appconfig.config['BARRIER_PROCESSING']['barrier_updates_table']
 
+dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
+
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
@@ -64,7 +66,7 @@ def loadBarrierUpdates(connection):
 
     query = f"""
         DROP TABLE IF EXISTS {dbTargetSchema}.{dbTargetTable}_archive;
-        CREATE TABLE {dbTargetSchema}.{dbTargetTable}_archive 
+        CREATE TABLE {dbTargetSchema}.{dbTargetTable}_archive
         AS SELECT * FROM {dbTargetSchema}.{dbTargetTable};
         ALTER TABLE  {dbTargetSchema}.{dbTargetTable}_archive OWNER TO cwf_analyst;
 
@@ -72,6 +74,20 @@ def loadBarrierUpdates(connection):
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey PRIMARY KEY (update_id);
+
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} add column snapped_point geometry(POINT, {appconfig.dataSrid});
+        SELECT public.snap_to_network('{dbTargetSchema}', '{dbTargetTable}', 'geometry', 'snapped_point', '125');
+        CREATE INDEX {dbTargetTable}_snapped_point_idx ON {dbTargetSchema}.{dbTargetTable} USING gist (snapped_point);
+
+        with match as (
+        SELECT a.id as stream_id, b.id as pntid, st_linelocatepoint(a.geometry, b.snapped_point) as streammeasure
+        FROM {dbTargetSchema}.{dbTargetStreamTable} a, {dbTargetSchema}.{dbTargetTable} b
+        WHERE st_intersects(a.geometry, st_buffer(b.snapped_point, 0.0001))
+        )
+        UPDATE {dbTargetSchema}.{dbTargetTable}
+        SET stream_id = a.stream_id, stream_measure = a.streammeasure
+        FROM match a WHERE a.pntid = {dbTargetSchema}.{dbTargetTable}.id;
+
     """
     
     with connection.cursor() as cursor:
@@ -246,7 +262,7 @@ def processUpdates(connection):
         WHERE u.update_type = 'new feature'
         AND update_status = 'ready';
 
-        -- eel (data from this source does not affect eel so passability is null)
+        -- eel
         INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
             barrier_id
             ,species_id
@@ -257,7 +273,10 @@ def processUpdates(connection):
             , (SELECT id
                 FROM {dbTargetSchema}.fish_species
                 WHERE code = 'ae')
-            ,NULL
+            ,CASE 
+                WHEN u.update_source = 'Saint Croix Assessments' THEN NULL
+                ELSE u.passability_status
+            END
         FROM {dbTargetSchema}.{dbBarrierTable} b
         JOIN {dbTargetSchema}.{dbTargetTable} u
             ON b.update_id = u.update_id::varchar

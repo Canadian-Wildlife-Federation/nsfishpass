@@ -49,10 +49,11 @@ def main():
         subprocess.run(pycmd)
         
         query = f"""
-
+        ALTER TABLE {dbTargetSchema}.{datatable} DROP COLUMN IF EXISTS id;
         ALTER TABLE {dbTargetSchema}.{datatable} add column id uuid;
         UPDATE {dbTargetSchema}.{datatable} set id = gen_random_uuid();
         
+        ALTER TABLE {dbTargetSchema}.{datatable} DROP COLUMN IF EXISTS snapped_point;
         ALTER TABLE {dbTargetSchema}.{datatable} add column snapped_point geometry(POINT, {appconfig.dataSrid});
         
         --SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '{snapDistance}');
@@ -61,6 +62,8 @@ def main():
 
         CREATE INDEX {datatable}_snapped_point_idx ON {dbTargetSchema}.{datatable} USING gist (snapped_point);
         
+        ALTER TABLE {dbTargetSchema}.{datatable} DROP COLUMN IF EXISTS stream_id;
+        ALTER TABLE {dbTargetSchema}.{datatable} DROP COLUMN IF EXISTS stream_measure;
         ALTER TABLE {dbTargetSchema}.{datatable} add column stream_id uuid;
         ALTER TABLE {dbTargetSchema}.{datatable} add column stream_measure numeric;
         

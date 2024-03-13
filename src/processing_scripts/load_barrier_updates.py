@@ -75,39 +75,20 @@ def loadBarrierUpdates(connection):
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey PRIMARY KEY (update_id);
 
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} add column snapped_point geometry(POINT, {appconfig.dataSrid});
-        SELECT public.snap_to_network('{dbTargetSchema}', '{dbTargetTable}', 'geometry', 'snapped_point', '125');
-        CREATE INDEX {dbTargetTable}_snapped_point_idx ON {dbTargetSchema}.{dbTargetTable} USING gist (snapped_point);
-
-        with match as (
-        SELECT a.id as stream_id, b.id as pntid, st_linelocatepoint(a.geometry, b.snapped_point) as streammeasure
-        FROM {dbTargetSchema}.{dbTargetStreamTable} a, {dbTargetSchema}.{dbTargetTable} b
-        WHERE st_intersects(a.geometry, st_buffer(b.snapped_point, 0.0001))
-        )
-        UPDATE {dbTargetSchema}.{dbTargetTable}
-        SET stream_id = a.stream_id, stream_measure = a.streammeasure
-        FROM match a WHERE a.pntid = {dbTargetSchema}.{dbTargetTable}.id;
-
     """
     
     with connection.cursor() as cursor:
         cursor.execute(query)
     connection.commit()
 
-    # for species in specCodes:
-    #     code = species[0]
-    #     colname = "passability_status_" + code
-    #     query = f"""ALTER TABLE {dbTargetSchema}.{dbTargetTable} ALTER COLUMN {colname} TYPE numeric USING {colname}::numeric;
-    #     """
-    #     with connection.cursor() as cursor:
-    #         cursor.execute(query)
-    # connection.commit()
-
 def joinBarrierUpdates(connection):
 
     query = f"""
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS barrier_id;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN barrier_id uuid;
+
+        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
+        UPDATE {dbTargetSchema}.{dbBarrierTable} SET snapped_point = original_point WHERE snapped_point IS NULL;
     """
     
     with connection.cursor() as cursor:
@@ -325,6 +306,8 @@ def processUpdates(connection):
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE p.barrier_id = a.barrier_id
         AND a.update_status = 'ready';
+
+        
     """
 
     processMultiple(connection)
@@ -361,7 +344,7 @@ def matchArchive(connection):
         )
 
         UPDATE {dbTargetSchema}.{dbTargetTable} a
-            SET barrier_id = m.archive_id
+            SET barrier_id = m.archive_id::uuid
             FROM matched m
             WHERE m.fid = a.fid;
 

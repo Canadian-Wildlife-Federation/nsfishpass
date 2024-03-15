@@ -202,7 +202,7 @@ def processUpdates(connection):
     #     newCols.append(col)
     # colString = ','.join(newCols)
 
-    mappingQuery = f"""
+    newDeleteQuery = f"""
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
             update_id, original_point, type, owner, 
@@ -255,7 +255,7 @@ def processUpdates(connection):
                 FROM {dbTargetSchema}.fish_species
                 WHERE code = 'ae')
             ,CASE 
-                WHEN u.update_source = 'Saint Croix Assessments' THEN NULL
+                WHEN u.update_source = 'Saint Croix Assessments' AND u.site_id NOT LIKE 'HR_001' THEN '0'
                 ELSE u.passability_status
             END
         FROM {dbTargetSchema}.{dbBarrierTable} b
@@ -276,7 +276,15 @@ def processUpdates(connection):
             );
         
         UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'delete feature';
+    """
 
+    with connection.cursor() as cursor:
+        cursor.execute(newDeleteQuery)
+    connection.commit()
+
+    joinBarrierUpdates(connection)
+
+    mappingQuery = f"""
         SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
         UPDATE {dbTargetSchema}.{dbBarrierTable} SET snapped_point = original_point WHERE snapped_point IS NULL;
 
@@ -295,7 +303,11 @@ def processUpdates(connection):
             date_examined = CASE WHEN a.date_examined IS NOT NULL THEN a.date_examined ELSE b.date_examined END,
             transport_feature_name = CASE WHEN (a.road_name IS NOT NULL AND a.road_name IS DISTINCT FROM b.transport_feature_name) THEN a.road_name ELSE b.transport_feature_name END,
             crossing_subtype = CASE WHEN a.crossing_subtype IS NOT NULL THEN a.crossing_subtype ELSE b.crossing_subtype END,
-            passability_status_notes = CASE WHEN a.notes IS NOT NULL THEN a.notes ELSE b.passability_status_notes END
+            passability_status_notes = 
+                CASE
+                WHEN a.notes IS NOT NULL AND b.passability_status_notes IS NULL THEN a.notes
+                WHEN a.notes IS NOT NULL AND b.passability_status_notes IS NOT NULL THEN b.passability_status_notes || ';' || a.notes
+                ELSE b.passability_status_notes END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE b.id = a.barrier_id
         AND a.update_status = 'ready';

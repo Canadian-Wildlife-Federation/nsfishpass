@@ -77,7 +77,7 @@ def computeAccessibility(connection):
                     UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
                     SET {code}_accessibility = 
                     CASE 
-                    WHEN strahler_order = 1 THEN '{appconfig.Accessibility.NOT.value}'
+                    --WHEN strahler_order = 1 THEN '{appconfig.Accessibility.NOT.value}'
                     WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt = 0) THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
                     WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt > 0) THEN '{appconfig.Accessibility.POTENTIAL.value}'
                     ELSE '{appconfig.Accessibility.NOT.value}' END;

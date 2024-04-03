@@ -72,6 +72,7 @@ def main():
               source_id uuid not null,
               {appconfig.dbWatershedIdField} varchar not null,
               sec_code varchar,
+              sec_name varchar,
               stream_name varchar,
               strahler_order integer,
               segment_length double precision,
@@ -87,10 +88,11 @@ def main():
             ALTER DEFAULT PRIVILEGES IN SCHEMA {dbTargetSchema} GRANT SELECT ON TABLES TO public;
 
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
-                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, sec_code,
+                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, sec_code, sec_name,
                 stream_name, strahler_order, geometry)
             SELECT gen_random_uuid(), t1.id, t1.aoi_id,
                 t3.SEC_CODE,
+                t1.watershed_name,
                 t1.rivername1, t1.strahler_order,
                 (ST_Dump((ST_Intersection(t1.geometry, t2.geometry)))).geom
             FROM {appconfig.dataSchema}.{appconfig.streamTable} t1

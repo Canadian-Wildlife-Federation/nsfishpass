@@ -39,6 +39,7 @@ trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
+secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 
 # with appconfig.connectdb() as conn:
 
@@ -359,6 +360,8 @@ def loadToBarriers(connection):
         UPDATE {dbTargetSchema}.{dbBarrierTable} SET wshed_name = '{dbWatershedId}';
         
         SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
+
+        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
     """
 
     with connection.cursor() as cursor:

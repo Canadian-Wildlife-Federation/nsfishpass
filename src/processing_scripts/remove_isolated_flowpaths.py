@@ -76,7 +76,7 @@ def disconnectedIslands(conn):
         features = cursor.fetchall()
 
     for feat in features:
-        geom = shapely.wkb.loads(feat[7], hex=True) # linestring from feature of stream network
+        geom = shapely.wkb.loads(feat[8], hex=True) # linestring from feature of stream network
 
 
         for i in range(len(geom.coords)-1): 

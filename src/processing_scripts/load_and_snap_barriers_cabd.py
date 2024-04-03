@@ -38,6 +38,7 @@ dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 
 def main():
     
@@ -103,6 +104,7 @@ def main():
                 strahler_order integer,
                 stream_id uuid,
                 wshed_name varchar,
+                secondary_wshed_name varchar,
                 transport_feature_name varchar,
 
                 critical_habitat varchar[],
@@ -122,6 +124,9 @@ def main():
 
                 primary key (id)
             );
+
+            --CREATE INDEX {dbTargetSchema}_{dbBarrierTable}_original_point on {dbTargetSchema}.{dbBarrierTable} using gist(original_point);
+            --CREATE INDEX {dbTargetSchema}_{dbBarrierTable}_snapped_point on {dbTargetSchema}.{dbBarrierTable} using gist(snapped_point);
 
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} OWNER TO cwf_analyst;
             
@@ -184,8 +189,6 @@ def main():
                 cursor.execute(insertquery, feature)
         conn.commit()
 
-        
-
         # snaps barrier features to network
         query = f"""
             CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
@@ -212,6 +215,16 @@ def main():
             WHERE snapped_point IS NULL
             AND type = 'dam';
         """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # get secondary watershed names
+        query = f"""
+        --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
+        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+        """
+
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
@@ -348,6 +361,7 @@ def main():
                 b.stream_name,
                 b.strahler_order,
                 b.wshed_name,
+                b.secondary_wshed_name,
                 b.transport_feature_name,
 
                 b.critical_habitat,
@@ -364,6 +378,7 @@ def main():
                 b.culvert_type,
                 b.culvert_condition,
                 b.action_items, 
+                b.passability_status_notes,
                 {colString}
             FROM {dbTargetSchema}.{dbBarrierTable} b
             {joinString}

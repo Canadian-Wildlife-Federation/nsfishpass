@@ -402,7 +402,8 @@ def processStreams(points, codes, conn):
                     conn.commit()
 
                 elif (update_type == 'habitat' and habitat_type == 'general' and pair_id is None and upstream):
-
+                    
+                    
                     query = f"""
                         UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET habitat_{code} = true
                         WHERE {dbIdField} IN (SELECT public.upstream('{stream_id_up}'));
@@ -571,13 +572,13 @@ def simplifyHabitatAccess(codes, conn):
 
         colname = "habitat_" + code
 
-        query = f"""
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {colname} = false WHERE {spawning} = false AND {rearing} = false;
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {colname} = false, {spawning} = false, {rearing} = false WHERE {code}_accessibility = '{appconfig.Accessibility.NOT.value}';
-        """
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
+        # query = f"""
+        #     UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {colname} = false WHERE {spawning} = false AND {rearing} = false;
+        #     UPDATE {dbTargetSchema}.{dbTargetStreamTable} set {colname} = false, {spawning} = false, {rearing} = false WHERE {code}_accessibility = '{appconfig.Accessibility.NOT.value}';
+        # """
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        # conn.commit()
 
         query = f"""
             UPDATE {dbTargetSchema}.{dbTargetStreamTable}
@@ -587,33 +588,6 @@ def simplifyHabitatAccess(codes, conn):
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
-
-        if code == 'sm':
-            
-            query = f"""
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            SET {spawning} = true
-            WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
-            AND 
-            {dbSegmentGradientField} >= {mingradient}
-            AND 
-            {dbSegmentGradientField} < {maxgradient};
-
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            SET {rearing} = true
-            WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
-            AND 
-            {dbSegmentGradientField} >= {mingradient}
-            AND 
-            {dbSegmentGradientField} < {maxgradient};
-
-            UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            SET {colname} = true WHERE {spawning} is true or {rearing} is true;
-            """
-
-            with conn.cursor() as cursor:
-                cursor.execute(query)
-            conn.commit()
 
 def main():
 

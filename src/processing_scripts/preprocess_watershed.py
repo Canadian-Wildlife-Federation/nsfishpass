@@ -41,6 +41,10 @@ publicSchema = "public"
 aoi = "chyf_aoi"
 aoiTable = publicSchema + "." + aoi
 
+# stream order segment weighting
+w1 = 0.25
+w2 = 0.75
+
 def main():
 
     with appconfig.connectdb() as conn:
@@ -76,6 +80,7 @@ def main():
               stream_name varchar,
               strahler_order integer,
               segment_length double precision,
+              w_segment_length double precision,
               geometry geometry(LineString, {appconfig.dataSrid}),
               primary key ({appconfig.dbIdField})
             );
@@ -102,6 +107,11 @@ def main():
 
             -------------------------
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set segment_length = st_length2d(geometry) / 1000.0;
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} set w_segment_length = (case strahler_order 
+                                                                                    when 1 then segment_length * {w1}
+                                                                                    when 2 then segment_length * {w2}
+                                                                                    else segment_length
+                                                                                    end);
             ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} add column geometry_original geometry(LineString, {appconfig.dataSrid});
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry_original = geometry;
             UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);

@@ -113,6 +113,9 @@ def main():
                 crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'RAIL', 'TRAIL')),
                 crossing_type varchar,
                 crossing_subtype varchar,
+
+                ais_upstr varchar[],
+                ais_downstr varchar[],
                 
                 culvert_number varchar,
                 structure_id varchar,
@@ -121,6 +124,7 @@ def main():
                 culvert_type varchar,
                 culvert_condition varchar,
                 action_items varchar,
+                cmm_pt_exists boolean,
 
                 primary key (id)
             );
@@ -142,6 +146,7 @@ def main():
             CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{dbPassabilityTable} (
                 barrier_id uuid
                 ,species_id uuid
+                ,species_code varchar
                 ,passability_status varchar
                 ,passability_status_notes varchar
             );
@@ -231,7 +236,7 @@ def main():
 
         # Load barrier passability to intermediate table
         query = f"""
-            SELECT id 
+            SELECT id
             FROM {dbTargetSchema}.fish_species;
         """
 
@@ -285,6 +290,20 @@ def main():
                     WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
                     WHEN passability_status = 'PASSABLE' THEN 1
                     ELSE NULL END;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(updatequery)
+        conn.commit()
+
+        updatequery = f"""
+            ALTER TABLE cmm.barrier_passability
+            ADD COLUMN IF NOT EXISTS species_code varchar(32);
+
+            UPDATE cmm.barrier_passability b
+            SET species_code = f.code
+            FROM cmm.fish_species f 
+            WHERE f.id = b.species_id;
         """
 
         with conn.cursor() as cursor:

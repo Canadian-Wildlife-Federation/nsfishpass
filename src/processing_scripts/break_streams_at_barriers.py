@@ -38,6 +38,10 @@ dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['smoothedgeometry_field'
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 dbHabAccessUpdates = "habitat_access_updates"
 
+# stream order segment weighting
+w1 = 0.25
+w2 = 0.75
+
 # with appconfig.connectdb() as conn:
 
 #     query = f"""
@@ -319,12 +323,17 @@ def breakstreams (conn):
               
         INSERT INTO  {dbTargetSchema}.{dbTargetStreamTable} 
             (id, source_id, {appconfig.dbWatershedIdField}, sec_code, stream_name, strahler_order, 
-            segment_length,
+            segment_length, w_segment_length,
             {appconfig.streamTableChannelConfinementField},{appconfig.streamTableDischargeField},
             mainstem_id, geometry)
         SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code,
             a.stream_name, a.strahler_order,
             st_length2d(a.geometry) / 1000.0, 
+            case strahler_order 
+            when 1 then (st_length2d(a.geometry) / 1000.0) * {w1}
+            when 2 then (st_length2d(a.geometry) / 1000.0) * {w2}
+            else (st_length2d(a.geometry) / 1000.0)
+            end,
             a.{appconfig.streamTableChannelConfinementField},
             a.{appconfig.streamTableDischargeField}, 
             mainstem_id, a.geometry

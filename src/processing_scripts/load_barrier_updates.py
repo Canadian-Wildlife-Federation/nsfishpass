@@ -27,6 +27,7 @@
 
 import subprocess
 import appconfig
+import sys
 
 iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
@@ -132,32 +133,6 @@ def joinBarrierUpdates(connection):
         with connection.cursor() as cursor:
             cursor.execute(query)
         connection.commit()
-
-    # query = f"""
-    # with match AS (
-    #     SELECT
-    #     foo.update_id,
-    #     closest_point.id,
-    #     closest_point.dist
-    #     FROM {dbTargetSchema}.{dbTargetTable} AS foo
-    #     CROSS JOIN LATERAL 
-    #     (SELECT
-    #         id, 
-    #         ST_Distance(bar.snapped_point, foo.geometry) as dist
-    #         FROM {dbTargetSchema}.{dbBarrierTable} AS bar
-    #         WHERE ST_DWithin(bar.snapped_point, foo.geometry, {joinDistance})
-    #         ORDER BY ST_Distance(bar.snapped_point, foo.geometry)
-    #         LIMIT 1
-    #     ) AS closest_point
-    #     )
-    # UPDATE {dbTargetSchema}.{dbTargetTable}
-    # SET barrier_id = a.id
-    # FROM match AS a WHERE a.update_id = {dbTargetSchema}.{dbTargetTable}.update_id
-    # AND update_type IN ('modify feature', 'delete feature');
-    # """
-    # with connection.cursor() as cursor:
-    #     cursor.execute(query)
-    # connection.commit()
     
     
 
@@ -178,24 +153,13 @@ def processUpdates(connection):
 
                 # update most fields
                 cursor.execute(mappingQuery)
-                # update species-specific passability fields
-                # for species in specCodes:
-                #     code = species[0]
-                #     colname = "passability_status_" + code
-                #     passabilityQuery = f"""
-                #         UPDATE {dbTargetSchema}.{dbBarrierTable} AS b
-                #         SET {colname} = CASE WHEN a.{colname} IS NOT NULL THEN a.{colname} ELSE b.{colname} END
-                #         FROM {dbTargetSchema}.{dbTargetTable} AS a
-                #         WHERE b.id = a.barrier_id
-                #         AND a.update_status = 'ready';
-                #     """
-                #     cursor.execute(passabilityQuery)
 
                 query = f"""
                     UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_status = 'ready';
                     UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'ready' WHERE update_status = 'wait';
                 """
                 cursor.execute(query)
+
             
                 connection.commit()
 
@@ -223,26 +187,21 @@ def processUpdates(connection):
     with connection.cursor() as cursor:
         cursor.execute(initializeQuery)
 
-    # newCols = []
-    # for species in specCodes:
-    #     code = species[0]
-    #     col = "passability_status_" + code
-    #     newCols.append(col)
-    # colString = ','.join(newCols)
-
     newDeleteQuery = f"""
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
             update_id, original_point, type, owner, 
             passability_status_notes,
             stream_name, date_examined,
-            transport_feature_name
+            transport_feature_name,
+            cmm_pt_exists
             )
         SELECT 
             update_id, ST_Transform(geometry, 2961), barrier_type, ownership, 
             notes,
             stream_name, date_examined,
-            road_name
+            road_name,
+            cmm_pt_exists
         FROM {dbTargetSchema}.{dbTargetTable}
         WHERE update_type = 'new feature'
         AND update_status = 'ready';
@@ -310,6 +269,17 @@ def processUpdates(connection):
         cursor.execute(newDeleteQuery)
     connection.commit()
 
+    updatequery = f"""
+        UPDATE cmm.barrier_passability b
+        SET species_code = f.code
+        FROM cmm.fish_species f 
+        WHERE f.id = b.species_id;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(updatequery)
+    connection.commit()
+
     joinBarrierUpdates(connection)
 
     mappingQuery = f"""
@@ -331,9 +301,11 @@ def processUpdates(connection):
             date_examined = CASE WHEN a.date_examined IS NOT NULL THEN a.date_examined ELSE b.date_examined END,
             transport_feature_name = CASE WHEN (a.road_name IS NOT NULL AND a.road_name IS DISTINCT FROM b.transport_feature_name) THEN a.road_name ELSE b.transport_feature_name END,
             crossing_subtype = CASE WHEN a.crossing_subtype IS NOT NULL THEN a.crossing_subtype ELSE b.crossing_subtype END,
+            cmm_pt_exists = CASE WHEN a.cmm_pt_exists IS NOT NULL THEN a.cmm_pt_exists ELSE b.cmm_pt_exists END,
             passability_status_notes = 
                 CASE
                 WHEN a.notes IS NOT NULL AND b.passability_status_notes IS NULL THEN a.notes
+                WHEN a.notes IS NOT NULL AND b.passability_status_notes IS NOT NULL AND b.passability_status_notes LIKE a.notes THEN b.passability_status_notes
                 WHEN a.notes IS NOT NULL AND b.passability_status_notes IS NOT NULL THEN b.passability_status_notes || ';' || a.notes
                 ELSE b.passability_status_notes END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
@@ -345,7 +317,16 @@ def processUpdates(connection):
             passability_status = CASE WHEN a.passability_status_as IS NOT NULL AND a.passability_status_as IS DISTINCT FROM p.passability_status THEN a.passability_status_as ELSE p.passability_status END
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE p.barrier_id = a.barrier_id
-        AND a.update_status = 'ready';
+        AND a.update_status = 'ready'
+        AND p.species_code = 'as';
+
+        UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
+        SET
+            passability_status = CASE WHEN a.passability_status_as IS NOT NULL AND a.passability_status_ae IS DISTINCT FROM p.passability_status THEN a.passability_status_ae ELSE p.passability_status END
+        FROM {dbTargetSchema}.{dbTargetTable} AS a
+        WHERE p.barrier_id = a.barrier_id
+        AND a.update_status = 'ready'
+        AND p.species_code = 'ae';
 
         
     """

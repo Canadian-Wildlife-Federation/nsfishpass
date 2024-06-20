@@ -153,22 +153,27 @@ def generateBarrierData(conn, species):
 
     barrierDict = {}
 
-    # passabilitymodel = ''
+    passabilitymodel = ''
 
-    # for fish in species:
-    #     passabilitymodel = passabilitymodel + ', passability_status_' + fish
+    for fish in species:
+        passabilitymodel = passabilitymodel + ', MAX(CASE WHEN code = \''+fish+'\' THEN passability_status ELSE NULL END) AS passability_'+fish
 
     # query = f"""
     # SELECT id {passabilitymodel} FROM {dbTargetSchema}.{dbBarrierTable};
     # """
     query = f"""
-    SELECT b.id, p.passability_status, f.code
-    FROM {dbTargetSchema}.{dbBarrierTable} b
-    LEFT OUTER JOIN {dbTargetSchema}.{dbPassabilityTable} p
-        ON b.id = p.barrier_id
-    JOIN {dbTargetSchema}.fish_species f
-        ON p.species_id = f.id
-    ORDER BY b.id, f.code
+    WITH pass AS (
+        SELECT b.id, p.passability_status, f.code
+        FROM {dbTargetSchema}.{dbBarrierTable} b
+        LEFT OUTER JOIN {dbTargetSchema}.{dbPassabilityTable} p
+            ON b.id = p.barrier_id
+        JOIN {dbTargetSchema}.fish_species f
+            ON p.species_id = f.id
+        ORDER BY b.id, f.code
+    )
+    SELECT id {passabilitymodel}
+    FROM pass
+    GROUP BY id;
     """
     
     with conn.cursor() as cursor:
@@ -176,48 +181,48 @@ def generateBarrierData(conn, species):
         allbarrierdata = cursor.fetchall()
 
 
-        bid = ''
-        for i in range(len(allbarrierdata)):
-            barrier = allbarrierdata[i]
-            passabilitystatus = {}
-
-            # If we have reached the next barrier in the passability table
-            # then add the previous barrier to barrierDict and update the 
-            # bid to build the next entry for the next rows
-            if bid != barrier[0]:
-                if bid != '':
-                    # check for species not in barrier table
-                    # in which case, the passability is 0
-                    for fish in species:
-                        if fish not in passabilitystatus:
-                            passabilitystatus[fish] = float(0)
-                    barrierDict[bid] = BarrierData(bid, passabilitystatus)
-                bid = barrier[0]
-                print(bid)
-
-            fish = barrier[2]
-
-            passabilitystatus[fish] = float(0 if barrier[1] is None else barrier[1])
-
-        # Don't forget to add the last barrier
-        for fish in species:
-            if fish not in passabilitystatus:
-                passabilitystatus[fish] = float(0)
-        barrierDict[bid] = BarrierData(bid, passabilitystatus)
-
-        
-        # for barrier in allbarrierdata:
-
-        #     bid = barrier[0]
+        # bid = ''
+        # for i in range(len(allbarrierdata)):
+        #     barrier = allbarrierdata[i]
         #     passabilitystatus = {}
 
-        #     index = 1
+        #     # If we have reached the next barrier in the passability table
+        #     # then add the previous barrier to barrierDict and update the 
+        #     # bid to build the next entry for the next rows
+        #     if bid != barrier[0]:
+        #         if bid != '':
+        #             # check for species not in barrier table
+        #             # in which case, the passability is 0
+        #             for fish in species:
+        #                 if fish not in passabilitystatus:
+        #                     passabilitystatus[fish] = float(0)
+        #             barrierDict[bid] = BarrierData(bid, passabilitystatus)
+        #         bid = barrier[0]
+        #         print(bid)
 
-        #     for fish in species:
-        #         passabilitystatus[fish] = float(0 if barrier[index] is None else barrier[index])
-        #         index = index + 1
+        #     fish = barrier[2]
+
+        #     passabilitystatus[fish] = float(0 if barrier[1] is None else barrier[1])
+
+        # # Don't forget to add the last barrier
+        # for fish in species:
+        #     if fish not in passabilitystatus:
+        #         passabilitystatus[fish] = float(0)
+        # barrierDict[bid] = BarrierData(bid, passabilitystatus)
+
+        
+        for barrier in allbarrierdata:
+
+            bid = barrier[0]
+            passabilitystatus = {}
+
+            index = 1
+
+            for fish in species:
+                passabilitystatus[fish] = float(0 if barrier[index] is None else barrier[index])
+                index = index + 1
             
-        #     barrierDict[bid] = BarrierData(bid, passabilitystatus)
+            barrierDict[bid] = BarrierData(bid, passabilitystatus)
 
     return barrierDict
 

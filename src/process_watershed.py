@@ -55,6 +55,7 @@ print ("Processing: " + workingWatershedId)
 
 load_parameters.main()
 preprocess_watershed.main()
+remove_isolated_flowpaths.main()
 load_and_snap_barriers_cabd.main()
 # load_and_snap_fishobservation.main()
 compute_modelled_crossings.main()
@@ -76,7 +77,7 @@ assign_habitat.main()
 process_habitat_access_updates.main()
 compute_barriers_upstream_values.main()
 compute_barrier_dci.main()
-remove_isolated_flowpaths.main()
+
 
 print ("Processing Complete: " + workingWatershedId)
 print("Runtime: " + str((datetime.now() - startTime)))

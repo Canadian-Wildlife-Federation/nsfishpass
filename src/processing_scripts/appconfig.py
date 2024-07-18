@@ -64,6 +64,7 @@ dbIdField = "id"
 dbGeomField = "geometry"
 dbWatershedIdField = "watershed_id"
 watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
+tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
 
 class Accessibility(enum.Enum):
     ACCESSIBLE = 'ACCESSIBLE'

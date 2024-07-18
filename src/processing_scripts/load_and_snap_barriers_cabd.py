@@ -23,6 +23,7 @@ import appconfig
 import json, urllib.request
 from appconfig import dataSchema
 import ast
+import sys
 
 iniSection = appconfig.args.args[0]
 
@@ -34,8 +35,10 @@ nhnWatershedId = ast.literal_eval(appconfig.config[iniSection]['nhn_watershed_id
 nhnWatershedId = ','.join(nhnWatershedId)
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
+dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 
 def main():
     
@@ -49,6 +52,34 @@ def main():
         with conn.cursor() as cursor:
             cursor.execute(query)
             specCodes = cursor.fetchall()
+        conn.commit()
+
+        query = f""" DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # create fish species table
+        query = f"""
+            DROP TABLE IF EXISTS {dbTargetSchema}.fish_species;
+            
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.fish_species (
+                id uuid not null default gen_random_uuid()
+                ,code varchar(32)
+                ,common_name varchar(128)
+                ,mi_kmaw_name varchar(128)
+                
+                ,primary key (id)
+            );
+
+            INSERT INTO {dbTargetSchema}.fish_species (code, common_name, mi_kmaw_name)
+            SELECT code, name, mi_kmaw_name FROM {appconfig.dataSchema}.{fishSpeciesTable};
+
+            ALTER TABLE {dbTargetSchema}.fish_species OWNER TO cwf_analyst;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
 
         # creates barriers table with attributes from CABD and crossings table
         query = f"""
@@ -73,6 +104,7 @@ def main():
                 strahler_order integer,
                 stream_id uuid,
                 wshed_name varchar,
+                secondary_wshed_name varchar,
                 transport_feature_name varchar,
 
                 critical_habitat varchar[],
@@ -81,6 +113,9 @@ def main():
                 crossing_feature_type varchar CHECK (crossing_feature_type IN ('ROAD', 'RAIL', 'TRAIL')),
                 crossing_type varchar,
                 crossing_subtype varchar,
+
+                ais_upstr varchar[],
+                ais_downstr varchar[],
                 
                 culvert_number varchar,
                 structure_id varchar,
@@ -89,13 +124,36 @@ def main():
                 culvert_type varchar,
                 culvert_condition varchar,
                 action_items varchar,
+                cmm_pt_exists boolean,
 
                 primary key (id)
             );
 
+            --CREATE INDEX {dbTargetSchema}_{dbBarrierTable}_original_point on {dbTargetSchema}.{dbBarrierTable} using gist(original_point);
+            --CREATE INDEX {dbTargetSchema}_{dbBarrierTable}_snapped_point on {dbTargetSchema}.{dbBarrierTable} using gist(snapped_point);
+
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} OWNER TO cwf_analyst;
             
         """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # create passability table
+        query = f"""
+            DROP TABLE IF EXISTS {dbTargetSchema}.{dbPassabilityTable};
+            
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{dbPassabilityTable} (
+                barrier_id uuid
+                ,species_id uuid
+                ,species_code varchar
+                ,passability_status varchar
+                ,passability_status_notes varchar
+            );
+
+            ALTER TABLE {dbTargetSchema}.{dbPassabilityTable} OWNER TO cwf_analyst;
+        """
+
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
@@ -119,6 +177,7 @@ def main():
             output_feature.append(feature["properties"]["passability_status"])
             output_data.append(output_feature)
 
+
         insertquery = f"""
             INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
                 cabd_id, 
@@ -134,7 +193,7 @@ def main():
             for feature in output_data:
                 cursor.execute(insertquery, feature)
         conn.commit()
-                        
+
         # snaps barrier features to network
         query = f"""
             CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
@@ -164,37 +223,188 @@ def main():
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
-         
-        print("Loading barriers from CABD dataset complete")
 
-        # add species-specific passability fields
-        for species in specCodes:
-            code = species[0]
+        # get secondary watershed names
+        query = f"""
+        --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
+        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+        """
 
-            colname = "passability_status_" + code
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # Load barrier passability to intermediate table
+        query = f"""
+            SELECT id
+            FROM {dbTargetSchema}.fish_species;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            species = cursor.fetchall()
+        conn.commit()
+
+        query = f"""
+            SELECT id, passability_status 
+            FROM {dbTargetSchema}.{dbBarrierTable};
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            feature_data = cursor.fetchall()
+        conn.commit()
+        
+        passability_data = []
+
+        # Get data for passability table
+        for feature in feature_data:
+            for s in species:
+                passability_feature = []
+                passability_feature.append(feature[0])
+                passability_feature.append(s[0])
+                passability_feature.append(feature[1])
+                passability_data.append(passability_feature)
+                        
+        insertquery = f"""
+            INSERT INTO {dbTargetSchema}.barrier_passability (
+                barrier_id
+                ,species_id
+                ,passability_status
+                )
+            VALUES (%s, %s, UPPER(%s));
+
             
-            query = f"""
-                alter table {dbTargetSchema}.{dbBarrierTable} 
-                add column if not exists {colname} numeric;
-    
-                update {dbTargetSchema}.{dbBarrierTable}
-                set {colname} = 
+        """
+        with conn.cursor() as cursor:
+            for feature in passability_data:
+                cursor.execute(insertquery, feature)
+        conn.commit()
+
+        updatequery = f"""
+            UPDATE {dbTargetSchema}.barrier_passability
+                SET passability_status = 
                     CASE
                     WHEN passability_status = 'BARRIER' THEN 0
                     WHEN passability_status = 'UNKNOWN' THEN 0
                     WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
                     WHEN passability_status = 'PASSABLE' THEN 1
                     ELSE NULL END;
-            """
+        """
 
-            with conn.cursor() as cursor:
-                cursor.execute(query)
+        with conn.cursor() as cursor:
+            cursor.execute(updatequery)
+        conn.commit()
+
+        updatequery = f"""
+            ALTER TABLE cmm.barrier_passability
+            ADD COLUMN IF NOT EXISTS species_code varchar(32);
+
+            UPDATE cmm.barrier_passability b
+            SET species_code = f.code
+            FROM cmm.fish_species f 
+            WHERE f.id = b.species_id;
+        """
+
+        with conn.cursor() as cursor:
+            cursor.execute(updatequery)
+        conn.commit()
+         
+        print("Loading barriers from CABD dataset complete")
+
+
+        # add species-specific passability fields
+        # for species in specCodes:
+        #     code = species[0]
+
+        #     colname = "passability_status_" + code
+            
+        #     query = f"""
+        #         alter table {dbTargetSchema}.{dbBarrierTable} 
+        #         add column if not exists {colname} numeric;
+    
+        #         update {dbTargetSchema}.{dbBarrierTable}
+        #         set {colname} = 
+        #             CASE
+        #             WHEN passability_status = 'BARRIER' THEN 0
+        #             WHEN passability_status = 'UNKNOWN' THEN 0
+        #             WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
+        #             WHEN passability_status = 'PASSABLE' THEN 1
+        #             ELSE NULL END;
+        #     """
+
+        #     with conn.cursor() as cursor:
+        #         cursor.execute(query)
         
         query = f"""
             alter table {dbTargetSchema}.{dbBarrierTable} 
-            drop column if exists passability_status;
+            drop column if exists passability_status cascade;
         """
 
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # create view combining barrier and passability table
+        # programmatically build columns, joins, and conditions based on species in species table
+        cols = []
+        joinString = ''
+        conditionString = ''
+        for i in range(len(specCodes)):
+            code = specCodes[i][0]
+            col = f'p{i}.passability_status AS passability_status_{code}'
+            cols.append(col)
+            joinString = joinString + f'JOIN {dbTargetSchema}.{dbPassabilityTable} p{i} ON b.id = p{i}.barrier_id\n'
+            joinString = joinString + f'JOIN {dbTargetSchema}.fish_species f{i} ON f{i}.id = p{i}.species_id\n'
+            if i == 0:
+                conditionString = conditionString + f'f{i}.code = \'{code}\'\n'
+            else:
+                conditionString = conditionString + f'AND f{i}.code = \'{code}\'\n' 
+        colString = ','.join(cols)
+
+        query = f"""
+            CREATE VIEW {dbTargetSchema}.barrier_passability_view AS 
+            SELECT 
+                b.id,
+                b.cabd_id,
+                b.modelled_id,
+                b.update_id,
+                b.original_point,
+                b.snapped_point,
+                b.name,
+                b.type,
+                b.owner,
+
+                b.dam_use,
+
+                b.stream_name,
+                b.strahler_order,
+                b.wshed_name,
+                b.secondary_wshed_name,
+                b.transport_feature_name,
+
+                b.critical_habitat,
+                
+                b.crossing_status,
+                b.crossing_feature_type,
+                b.crossing_type,
+                b.crossing_subtype,
+                
+                b.culvert_number,
+                b.structure_id,
+                b.date_examined,
+                b.road,
+                b.culvert_type,
+                b.culvert_condition,
+                b.action_items, 
+                b.passability_status_notes,
+                {colString}
+            FROM {dbTargetSchema}.{dbBarrierTable} b
+            {joinString}
+            WHERE {conditionString};
+        """
+
+        # print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

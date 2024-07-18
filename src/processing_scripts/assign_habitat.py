@@ -54,27 +54,29 @@ def computeHabitatModel(connection):
 
             print("     processing " + name)
 
-            # if code == 'as': # atlantic salmon
+            if code == 'as': # atlantic salmon
 
-            query = f"""
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
-                
-                UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-                    SET {colname} = false;
+                query = f"""
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
+                    
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                        SET {colname} = false;
 
-                UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
-                SET {colname} = true
-                    WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
-                    AND 
-                    {dbSegmentGradientField} >= {mingradient} 
-                    AND 
-                    {dbSegmentGradientField} < {maxgradient};
-                
-            """
-            with connection.cursor() as cursor2:
-                cursor2.execute(query)
-            connection.commit()
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
+                    SET {colname} = true
+                        WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
+                        AND 
+                        {dbSegmentGradientField} >= {mingradient} 
+                        AND 
+                        {dbSegmentGradientField} < {maxgradient}
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
+                    
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+                connection.commit()
             
             # elif code == 'bt': # brook trout
 
@@ -90,19 +92,18 @@ def computeHabitatModel(connection):
             #         cursor2.execute(query)
             #     connection.commit()
             
-            # elif code == 'ae': # american eel
+            elif code == 'ae': # american eel
 
-            #     query = f"""
-            #         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
-            #         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
+                query = f"""
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
                     
-            #         UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            #             SET {colname} = false;
-                    
-            #     """
-            #     with connection.cursor() as cursor2:
-            #         cursor2.execute(query)
-            #     connection.commit()
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                        SET {colname} = false;
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+                connection.commit()
 
             # elif code == 'sm': # smelt
 
@@ -151,27 +152,29 @@ def computeHabitatModel(connection):
 
             print("     processing " + name)
 
-            # if code == 'as': # atlantic salmon
+            if code == 'as': # atlantic salmon
 
-            query = f"""
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
-                
-                UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-                    SET {colname} = false;
+                query = f"""
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
+                    
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                        SET {colname} = false;
 
-                UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
-                SET {colname} = true
-                    WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
-                    AND 
-                    {dbSegmentGradientField} >= {mingradient} 
-                    AND 
-                    {dbSegmentGradientField} < {maxgradient};
-                
-            """
-            with connection.cursor() as cursor2:
-                cursor2.execute(query)
-            connection.commit()
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} a
+                    SET {colname} = true
+                        WHERE {code}_accessibility IN ('{appconfig.Accessibility.ACCESSIBLE.value}', '{appconfig.Accessibility.POTENTIAL.value}')
+                        AND 
+                        {dbSegmentGradientField} >= {mingradient} 
+                        AND 
+                        {dbSegmentGradientField} < {maxgradient}
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
+                    
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+                connection.commit()
 
             #     query = f"""
             #         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
@@ -208,23 +211,25 @@ def computeHabitatModel(connection):
             #         cursor2.execute(query)
             #     connection.commit()
             
-            # elif code == 'ae': # american eel
+            elif code == 'ae': # american eel
 
-            #     query = f"""
-            #         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
-            #         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
+                query = f"""
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {colname};
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN IF NOT EXISTS {colname} boolean;
                     
-            #         UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            #             SET {colname} = false;
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                        SET {colname} = false;
 
-            #         UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-            #             SET {colname} = true
-            #             WHERE strahler_order >= 2;
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                        SET {colname} = true
+                        WHERE strahler_order >= 2
+                        AND 
+                        NOT ST_Intersects(geometry, (SELECT geometry FROM {dataSchema}.{appconfig.tidalZones}));
                     
-            #     """
-            #     with connection.cursor() as cursor2:
-            #         cursor2.execute(query)
-            #     connection.commit()
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+                connection.commit()
 
             # elif code == 'sm': # smelt
 

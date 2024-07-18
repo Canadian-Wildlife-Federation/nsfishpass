@@ -206,6 +206,16 @@ CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_names(
     OPTIONS (schema_name 'chyf2', table_name 'names');
 
 GRANT SELECT ON TABLE public.chyf_names TO PUBLIC;
+
+CREATE FOREIGN TABLE IF NOT EXISTS public.chyf_shoreline(
+    id uuid NULL,
+    aoi_id uuid NULL,
+    geometry geometry NULL
+)
+    SERVER chyf_server
+    OPTIONS (schema_name 'chyf2', table_name 'shoreline');
+
+GRANT SELECT ON TABLE public.chyf_shoreline TO PUBLIC;
 """
 
 with appconfig.connectdb() as conn:

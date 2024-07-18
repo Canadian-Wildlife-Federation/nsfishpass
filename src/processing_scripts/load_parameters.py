@@ -43,7 +43,7 @@ def main():
         # load data using ogr
         orgDb = "dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost +"' port='"+ appconfig.dbPort + "' user='" + appconfig.dbUser + "' password='" + appconfig.dbPassword + "'"
         pycmd = '"' + appconfig.ogr + '" -f "PostgreSQL" PG:"' + orgDb + '" "' + dataFile + '"' + ' -nln "' + sourceTable + '" -oo AUTODETECT_TYPE=YES -oo EMPTY_STRING_AS_NULL=YES'
-        # print(pycmd)
+        print(pycmd)
         subprocess.run(pycmd)
         print("CSV loaded to table: " + sourceTable)
 
@@ -53,6 +53,7 @@ def main():
             CREATE TABLE {appconfig.dataSchema}.{fishSpeciesTable}(
                 code varchar(4) PRIMARY KEY,
                 name varchar,
+                mi_kmaw_name varchar,
                 
                 accessibility_gradient double precision not null,
                 
@@ -82,6 +83,7 @@ def main():
             INSERT INTO {appconfig.dataSchema}.{fishSpeciesTable}(
                 code,
                 name,
+                mi_kmaw_name,
 
                 accessibility_gradient,
 
@@ -101,29 +103,32 @@ def main():
                 rear_channel_confinement_max
             )
             SELECT
-                code,
-                name,
+                a.code,
+                a.name,
+                a.mi_kmaw_name,
 
-                accessibility_gradient,
+                a.accessibility_gradient,
 
-                spawn_gradient_min,
-                spawn_gradient_max,
-                rear_gradient_min,
-                rear_gradient_max,
+                a.spawn_gradient_min,
+                a.spawn_gradient_max,
+                a.rear_gradient_min,
+                a.rear_gradient_max,
                 
-                spawn_discharge_min,
-                spawn_discharge_max,
-                rear_discharge_min,
-                rear_discharge_max,
+                a.spawn_discharge_min,
+                a.spawn_discharge_max,
+                a.rear_discharge_min,
+                a.rear_discharge_max,
                 
-                spawn_channel_confinement_min,
-                spawn_channel_confinement_max,
-                rear_channel_confinement_min,
-                rear_channel_confinement_max
-            FROM {sourceTable};
+                a.spawn_channel_confinement_min,
+                a.spawn_channel_confinement_max,
+                a.rear_channel_confinement_min,
+                a.rear_channel_confinement_max
+            FROM {sourceTable} a;
 
             DROP TABLE {sourceTable};
             """
+        
+        # print(query)
 
         with conn.cursor() as cursor:
             cursor.execute(query)

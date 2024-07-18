@@ -67,7 +67,7 @@ def disconnectedIslands(conn):
 
     # Get the stream network
     query = f"""
-        SELECT * 
+        SELECT id, geometry 
         FROM {dbTargetSchema}.{dbTargetStreamTable}_copy
     """
 
@@ -76,7 +76,7 @@ def disconnectedIslands(conn):
         features = cursor.fetchall()
 
     for feat in features:
-        geom = shapely.wkb.loads(feat[6], hex=True) # linestring from feature of stream network
+        geom = shapely.wkb.loads(feat[1], hex=True) # linestring from feature of stream network
 
 
         for i in range(len(geom.coords)-1): 
@@ -89,7 +89,7 @@ def disconnectedIslands(conn):
             )
     
     print("    finding connected subgraphs")
-    connected_components = list(G.subgraph(c) for c in nx.connected_components(G))
+    connected_components = list(G.subgraph(c) for c in sorted(nx.connected_components(G), key=len, reverse=True))
 
     query = f"""
         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable}_copy
@@ -116,8 +116,9 @@ def disconnectedIslands(conn):
         for edge in graph.edges(data=True):
             with conn.cursor() as cursor:
                 cursor.execute(updateQuery, (i, edge[2].get('fid')))
+            conn.commit()
                 
-    conn.commit()
+    
 
 
 def dissolveFeatures(conn):

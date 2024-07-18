@@ -48,24 +48,45 @@ def computeAccessibility(connection):
             name = feature[1]
 
             print("  processing " + name)
-            # initial accessibility calculation
-            query = f"""
-            
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {code}_accessibility;
-            
-                ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN {code}_accessibility varchar;
+
+            if code == 'as':
+                # initial accessibility calculation
+                query = f"""
                 
-                UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
-                SET {code}_accessibility = 
-                CASE 
-                WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt = 0) THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
-                WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt > 0) THEN '{appconfig.Accessibility.POTENTIAL.value}'
-                ELSE '{appconfig.Accessibility.NOT.value}' END;
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {code}_accessibility;
                 
-            """
-            with connection.cursor() as cursor2:
-                cursor2.execute(query)
-            
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN {code}_accessibility varchar;
+                    
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                    SET {code}_accessibility = 
+                    CASE 
+                    WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt = 0) THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
+                    WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt > 0) THEN '{appconfig.Accessibility.POTENTIAL.value}'
+                    ELSE '{appconfig.Accessibility.NOT.value}' END;
+                    
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+            elif code == 'ae':
+                query = f"""
+                
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS {code}_accessibility;
+                
+                    ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} ADD COLUMN {code}_accessibility varchar;
+                    
+                    UPDATE {dbTargetSchema}.{dbTargetStreamTable} 
+                    SET {code}_accessibility = 
+                    CASE 
+                    --WHEN strahler_order = 1 THEN '{appconfig.Accessibility.NOT.value}'
+                    WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt = 0) THEN '{appconfig.Accessibility.ACCESSIBLE.value}'
+                    WHEN (gradient_barrier_down_{code}_cnt = 0 and barrier_down_{code}_cnt > 0) THEN '{appconfig.Accessibility.POTENTIAL.value}'
+                    ELSE '{appconfig.Accessibility.NOT.value}' END;
+                    
+                """
+                with connection.cursor() as cursor2:
+                    cursor2.execute(query)
+
+                
             # # process any updates to accessibility
             # query = f"""
             # UPDATE {dbTargetSchema}.{dbTargetStreamTable} a

@@ -37,6 +37,7 @@ def main():
         
         CREATE TABLE IF NOT EXISTS {appconfig.dataSchema}.{statTable}(
             watershed_id varchar,
+            sec_wshed_name varchar,
             total_km double precision,
             accessible_all_km double precision,
             potentially_accessible_all_km double precision,
@@ -200,7 +201,7 @@ def main():
                     allfishaccessrear = ''
                 else:
                     allfishaccessrear = allfishaccessrear + " OR "
-                allfishaccessrear = allfishaccessrear + f"""({fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_spawn_{fish} = true)"""
+                allfishaccessrear = allfishaccessrear + f"""({fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_rear_{fish} = true)"""
 
                 if (allfishaccesshabitat is None):
                     allfishaccesshabitat = ''

@@ -39,20 +39,25 @@ dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
 secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+species = appconfig.config[iniSection]['species']
 
 def main():
     
     with appconfig.connectdb() as conn:
 
-        query = f"""
-        SELECT code
-        FROM {appconfig.dataSchema}.{fishSpeciesTable};
-        """
+        global species
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-            specCodes = cursor.fetchall()
-        conn.commit()
+        specCodes = [substring.strip() for substring in species.split(',')]
+
+        # query = f"""
+        # SELECT code
+        # FROM {appconfig.dataSchema}.{fishSpeciesTable};
+        # """
+
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        #     specCodes = cursor.fetchall()
+        # conn.commit()
 
         query = f""" DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; """
         with conn.cursor() as cursor:
@@ -224,15 +229,16 @@ def main():
             cursor.execute(query)
         conn.commit()
 
-        # get secondary watershed names
-        query = f"""
-        --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
-        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
-        """
+        if secondaryWatershedTable != 'None':
+            # get secondary watershed names
+            query = f"""
+            --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
+            UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+            """
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+            conn.commit()
 
         # Load barrier passability to intermediate table
         query = f"""
@@ -297,12 +303,12 @@ def main():
         conn.commit()
 
         updatequery = f"""
-            ALTER TABLE cmm.barrier_passability
+            ALTER TABLE {dbTargetSchema}.barrier_passability
             ADD COLUMN IF NOT EXISTS species_code varchar(32);
 
-            UPDATE cmm.barrier_passability b
+            UPDATE {dbTargetSchema}.barrier_passability b
             SET species_code = f.code
-            FROM cmm.fish_species f 
+            FROM {dbTargetSchema}.fish_species f 
             WHERE f.id = b.species_id;
         """
 

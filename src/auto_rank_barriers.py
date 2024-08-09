@@ -187,17 +187,29 @@ order by group_id, barrier_cnt_upstr_{species_code} DESC;
 ----------------- CALCULATE GROUP GAINS -------------------------	
 	
 alter table cmm.ranked_barriers_{species_code}_{watershed} add column total_hab_gain_group numeric;
+alter table cmm.ranked_barriers_{species_code}_{watershed} add column w_total_hab_gain_group numeric;
 alter table cmm.ranked_barriers_{species_code}_{watershed} add column num_barriers_group integer;
 alter table cmm.ranked_barriers_{species_code}_{watershed} add column avg_gain_per_barrier numeric;
+alter table cmm.ranked_barriers_{species_code}_{watershed} add column w_avg_gain_per_barrier numeric;
 
 with temp as (
-	SELECT sum(w_func_upstr_hab_{species_code}) AS sum, group_id
+	SELECT 
+    	sum(w_func_upstr_hab_{species_code}) AS w_sum
+        ,sum(func_upstr_hab_{species_code}) AS sum
+        ,group_id
 	from cmm.ranked_barriers_{species_code}_{watershed}
 	group by group_id
 )
 
-update cmm.ranked_barriers_{species_code}_{watershed} a SET total_hab_gain_group = t.sum FROM temp t WHERE t.group_id = a.group_id;
-update cmm.ranked_barriers_{species_code}_{watershed} SET total_hab_gain_group = w_func_upstr_hab_{species_code} WHERE group_id IS NULL;
+update cmm.ranked_barriers_{species_code}_{watershed} a 
+SET 
+	total_hab_gain_group = t.sum
+	,w_total_hab_gain_group = t.w_sum 
+FROM temp t 
+WHERE t.group_id = a.group_id;
+
+update cmm.ranked_barriers_{species_code}_{watershed} SET total_hab_gain_group = func_upstr_hab_{species_code} WHERE group_id IS NULL;
+update cmm.ranked_barriers_{species_code}_{watershed} SET w_total_hab_gain_group = w_func_upstr_hab_{species_code} WHERE group_id IS NULL;
 
 with temp as (
 	SELECT count(*) AS cnt, group_id
@@ -210,6 +222,7 @@ update cmm.ranked_barriers_{species_code}_{watershed} a SET num_barriers_group =
 update cmm.ranked_barriers_{species_code}_{watershed} SET num_barriers_group = 1 WHERE group_id IS NULL;
 
 update cmm.ranked_barriers_{species_code}_{watershed} SET avg_gain_per_barrier = total_hab_gain_group / num_barriers_group;
+update cmm.ranked_barriers_{species_code}_{watershed} SET w_avg_gain_per_barrier = w_total_hab_gain_group / num_barriers_group;
 
 ---------------GET DOWNSTREAM GROUP IDs----------------------------
 
@@ -241,39 +254,24 @@ WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = dg_arrays.id;
 
 ----------------- ASSIGN RANK ID  -------------------------	
 
--- Rank based on average gain per barrier in a group
-
--- ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed} ADD rank_avg_gain_per_barrier numeric;
-
--- WITH ranks AS
--- (
--- 	select group_id, avg_gain_per_barrier
--- 		,DENSE_RANK() OVER(order by avg_gain_per_barrier DESC) as rank_id
--- 	from cmm.ranked_barriers_{species_code}_{watershed}
--- )
--- update cmm.ranked_barriers_{species_code}_{watershed} 
--- SET rank_avg_gain_per_barrier = ranks.rank_id
--- FROM ranks
--- WHERE cmm.ranked_barriers_{species_code}_{watershed}.group_id = ranks.group_id;
-
 -- Rank based on first sorting the barriers into tiers by number of downstream barriers then by avg gain per barrier within those tiers (immediate gain)
 ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed} 
-ADD rank_avg_gain_tiered numeric;
+ADD rank_w_avg_gain_tiered numeric;
 
 WITH sorted AS (
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_hab_gain_group, avg_gain_per_barrier
-		,ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, avg_gain_per_barrier DESC) as row_num
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
+		,ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
-	WHERE avg_gain_per_barrier >= 0.5
+	WHERE w_avg_gain_per_barrier >= 0.5
 	UNION ALL
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_hab_gain_group, avg_gain_per_barrier
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,(SELECT MAX(row_num) FROM (
-			SELECT ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, avg_gain_per_barrier DESC) as row_num
+			SELECT ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
 			FROM cmm.ranked_barriers_{species_code}_{watershed}
-			WHERE avg_gain_per_barrier >= 0.5
-		) AS subquery) + ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, avg_gain_per_barrier DESC) as row_num 
+			WHERE w_avg_gain_per_barrier >= 0.5
+		) AS subquery) + ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num 
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
-	WHERE avg_gain_per_barrier < 0.5
+	WHERE w_avg_gain_per_barrier < 0.5
 	
 ),
 ranks AS (
@@ -281,35 +279,35 @@ ranks AS (
 		,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as ranks
 		,FIRST_VALUE(barrier_cnt_downstr_{species_code}) OVER (PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as tier
 	FROM sorted
-	ORDER BY group_id, barrier_cnt_downstr_{species_code}, avg_gain_per_barrier DESC
+	ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
 )
 UPDATE cmm.ranked_barriers_{species_code}_{watershed} 
-SET rank_avg_gain_tiered = ranks.ranks
+SET rank_w_avg_gain_tiered = ranks.ranks
 FROM ranks
 WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = ranks.id;
 
 -- Rank based on total habitat upstream (potential gain)
 ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed} 
-ADD rank_total_upstr_hab numeric;
+ADD rank_w_total_upstr_hab numeric;
 
 WITH sorted AS (
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,ROW_NUMBER() OVER(ORDER BY w_total_upstr_hab_{species_code} DESC) as row_num
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
 ),
 ranks AS (
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY row_num) as relative_rank
 	FROM sorted
-	ORDER BY group_id, barrier_cnt_downstr_{species_code}, avg_gain_per_barrier DESC
+	ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
 ),
 densify AS (
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,DENSE_RANK() OVER(ORDER BY relative_rank) as ranks
 	FROM ranks
 )
 UPDATE cmm.ranked_barriers_{species_code}_{watershed} 
-SET rank_total_upstr_hab = densify.ranks
+SET rank_w_total_upstr_hab = densify.ranks
 FROM densify
 WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = densify.id;
 
@@ -319,9 +317,9 @@ ADD rank_combined numeric;
 
 WITH ranks AS (
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
-		,rank_avg_gain_tiered
-		,rank_total_upstr_hab
-		,DENSE_RANK() OVER(ORDER BY rank_avg_gain_tiered + rank_total_upstr_hab, group_id ASC) as rank_composite
+		,rank_w_avg_gain_tiered
+		,rank_w_total_upstr_hab
+		,DENSE_RANK() OVER(ORDER BY rank_w_avg_gain_tiered + rank_w_total_upstr_hab, group_id ASC) as rank_composite
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
 	ORDER BY rank_composite ASC
 )
@@ -335,11 +333,11 @@ ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed}
 ADD tier_combined varchar;
 
 WITH ranks AS (
-	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
-		,rank_avg_gain_tiered
-		,rank_total_upstr_hab
+	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
+		,rank_w_avg_gain_tiered
+		,rank_w_total_upstr_hab
 		,rank_combined
-		,DENSE_RANK() OVER(ORDER BY LEAST(rank_avg_gain_tiered, rank_total_upstr_hab), group_id ASC) as rank_composite
+		,DENSE_RANK() OVER(ORDER BY LEAST(rank_w_avg_gain_tiered, rank_w_total_upstr_hab), group_id ASC) as rank_composite
 	FROM cmm.ranked_barriers_{species_code}_{watershed}
 )
 UPDATE cmm.ranked_barriers_{species_code}_{watershed}
@@ -354,11 +352,6 @@ WHERE cmm.ranked_barriers_{species_code}_{watershed}.id = r.id;
 
 ALTER TABLE cmm.ranked_barriers_{species_code}_{watershed}
 DROP COLUMN stream_id_up;
---DROP COLUMN func_upstr_hab_{species_code},
---DROP COLUMN total_upstr_hab_{species_code},
---DROP COLUMN w_func_upstr_hab_{species_code},
---DROP COLUMN rank_avg_gain_tiered,
---DROP COLUMN rank_total_upstr_hab;
 
 """
 

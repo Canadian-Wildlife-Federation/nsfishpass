@@ -359,14 +359,18 @@ def loadToBarriers(connection):
 
         UPDATE {dbTargetSchema}.{dbBarrierTable} SET wshed_name = '{dbWatershedId}';
         
-        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
-
-        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');  
     """
 
     with connection.cursor() as cursor:
         cursor.execute(query)
     connection.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);'
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
 
     query = f"""
         SELECT id 

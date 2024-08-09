@@ -36,6 +36,7 @@ dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 dbPassabiltyTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
+species = appconfig.config[iniSection]['species']
 
 edges = []
 nodes = dict()
@@ -346,20 +347,23 @@ def main():
 
         conn.autocommit = False
 
-        query = f"""
-        SELECT code, name
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
-        """
+        # query = f"""
+        # SELECT code, name
+        # FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        # """
 
         global specCodes
+        global species
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-            specCodes = cursor.fetchall()
+        specCodes = [substring.strip() for substring in species.split(',')]
+
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        #     specCodes = cursor.fetchall()
 
         for species in specCodes:
-            code = species[0]
-            name = species[1]
+            code = species
+            # name = species[1]
         
             
 
@@ -367,7 +371,7 @@ def main():
             nodes.clear()
             
             print("Computing Upstream/Downstream Barriers")
-            print("  processing barriers for", name)
+            print("  processing barriers for", code)
             print("  creating output column")
 
             query = f"""

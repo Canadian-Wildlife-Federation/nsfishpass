@@ -40,7 +40,7 @@ sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
 def loadWatersheds(conn):
 
     print("Loading watershed boundaries")
-    layer = "cmm_watersheds"
+    layer = watershedTable
     datatable = appconfig.dataSchema + "." + watershedTable
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
@@ -67,7 +67,11 @@ def loadWatersheds(conn):
 def loadSecondaryWatersheds(conn):
     print("Loading secondary watershed boundaries")
     # layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix", "cmm_shore_direct_1", "cmm_shore_direct_2", "cmm_shore_direct_3"]
-    layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+    #layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+    layers = [secondaryWatershedTable]
+
+    if secondaryWatershedTable == 'None':
+        return
 
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{secondaryWatershedTable};
@@ -81,7 +85,7 @@ def loadSecondaryWatersheds(conn):
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
     for layer in layers:
-        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
+        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geom -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
         subprocess.run(pycmd)
 
     query = f"""
@@ -97,7 +101,11 @@ def loadSecondaryWatersheds(conn):
 
 def loadTidalZones(conn):
     print("Loading tidal zones")
-    layer = "tidal_zones"
+    layer = tidalZones
+
+    if tidalZones == 'None':
+        return 
+    
     datatable = appconfig.dataSchema + "." + tidalZones
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
@@ -130,14 +138,12 @@ def loadStreams(conn):
     aoiTable = publicSchema + "." + aoi
 
     aois = str(sheds)[1:-1].upper()
-
     query = f"""
     SELECT id::varchar FROM {aoiTable} WHERE short_name IN ({aois});
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute(query)
         rows = cursor.fetchall()
-
 
     if len(rows) == 1:
         aoiTuple = f"('{rows[0]['id']}')"
@@ -165,6 +171,7 @@ def loadStreams(conn):
     ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO cwf_analyst;
     ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO cwf_analyst;
     """
+    # print(query)
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
@@ -178,11 +185,17 @@ def loadStreams(conn):
     UPDATE {appconfig.dataSchema}.{streamTable} SET rivername1 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid1 IS NOT NULL AND rivernameid1 = a.name_id;
     UPDATE {appconfig.dataSchema}.{streamTable} SET rivername2 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid2 IS NOT NULL AND rivernameid2 = a.name_id;
     UPDATE {appconfig.dataSchema}.{streamTable} b SET strahler_order = a.strahler_order FROM {appconfig.dataSchema}.{flowpathProperties} a WHERE b.id = a.id;
-    UPDATE {appconfig.dataSchema}.{streamTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {appconfig.dataSchema}.{streamTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);'
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
 
 
 def loadRoads(conn):
@@ -201,14 +214,20 @@ def loadRoads(conn):
 
     ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN watershed_name varchar;
 
-    UPDATE {appconfig.dataSchema}.{roadTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);
-
     ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
     """
 
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {appconfig.dataSchema}.{roadTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);'
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
 
 def main():
 

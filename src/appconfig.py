@@ -67,9 +67,9 @@ watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
 tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
 
 class Accessibility(enum.Enum):
-    ACCESSIBLE = 'ACCESSIBLE'
-    POTENTIAL = 'POTENTIALLY ACCESSIBLE'
-    NOT = 'NOT ACCESSIBLE'
+    ACCESSIBLE = 'CONNECTED NATURALLY ACCESSIBLE WATERBODIES'
+    POTENTIAL = 'DISCONNECTED NATURALLY ACCESSIBLE WATERBODIES'
+    NOT = 'NATURALLY INACCESSIBLE WATERBODIES'
 
 
 print(f"""--- Configuration Settings Begin ---

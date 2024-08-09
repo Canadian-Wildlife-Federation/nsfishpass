@@ -10,6 +10,7 @@ dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
+specCodes = appconfig.config[iniSection]['species']
 
 class StreamData:
     def __init__(self, fid, length, downbarriers, habitat):
@@ -288,11 +289,21 @@ def main():
     with appconfig.connectdb() as conn:
         conn.autocommit = False
 
+        global specCodes
+
+        specCodes = [substring.strip() for substring in specCodes.split(',')]
+
+        if len(specCodes) == 1:
+            specCodes = f"('{specCodes[0]}')"
+        else:
+            specCodes = tuple(specCodes)
+
         species = []
 
         query = f"""
             SELECT a.code
             FROM {appconfig.dataSchema}.{appconfig.fishSpeciesTable} a
+            WHERE code IN {specCodes};
         """
         with conn.cursor() as cursor:
             cursor.execute(query)

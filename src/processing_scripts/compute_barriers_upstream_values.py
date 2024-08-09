@@ -36,6 +36,7 @@ dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
+species_codes = appconfig.config[iniSection]['species']
 
 edges = []
 nodes = dict()
@@ -138,10 +139,21 @@ class Edge:
 
 def createNetwork(connection):
     # Takes longest to run, could look to improve in future
+
+    global specCodes
+    global species_codes
+
+    specCodes = [substring.strip() for substring in species_codes.split(',')]
+
+    if len(specCodes) == 1:
+        specCodes = f"('{specCodes[0]}')"
+    else:
+        specCodes = tuple(specCodes)
     
     query = f"""
         SELECT a.code
         FROM {appconfig.dataSchema}.{appconfig.fishSpeciesTable} a
+        WHERE code IN {specCodes};
     """
     
     barrierupcntmodel = ''
@@ -723,9 +735,19 @@ def writeResults(connection):
 
 def assignBarrierCounts(connection):
 
+    global specCodes
+
+    specCodes = [substring.strip() for substring in species_codes.split(',')]
+
+    if len(specCodes) == 1:
+        specCodes = f"('{specCodes[0]}')"
+    else:
+        specCodes = tuple(specCodes)
+
     query = f"""
         SELECT a.code
         FROM {appconfig.dataSchema}.{appconfig.fishSpeciesTable} a
+        WHERE code IN {specCodes};
     """
 
     with connection.cursor() as cursor:

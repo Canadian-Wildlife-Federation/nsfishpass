@@ -409,9 +409,9 @@ Computes an accessibility value for each fish species for each stream segment ba
 * barrier location
 
 Segments are classified as:
-* ACCESSIBLE - when there are no gradient barriers downstream and there are no impassable barriers downstream 
-* POTENTIALLY ACCESSIBLE - when there are no gradient barriers downstream but there are impassable barriers downstream
-* NOT ACCESSIBLE - when there are gradient barriers downstream
+* CONNECTED NATURALLY ACCESSIBLE WATERBODIES - when there are no gradient barriers downstream and there are no impassable barriers downstream 
+* DISCONNECTED NATURALLY ACCESSIBLE WATERBODIES - when there are no gradient barriers downstream but there are impassable barriers downstream
+* NATURALLY INACCESSIBLE WATERBODIES - when there are gradient barriers downstream
 
 **Script**
 

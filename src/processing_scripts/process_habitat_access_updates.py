@@ -11,6 +11,7 @@ dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 dbHabAccessUpdates = "habitat_access_updates"
 dbIdField = "id"
 dbSegmentGradientField = appconfig.config['GRADIENT_PROCESSING']['segment_gradient_field']
+species = appconfig.config[iniSection]['species']
 
 def getPoints(conn):
 
@@ -551,15 +552,15 @@ def addComments(points, conn):
 
 def simplifyHabitatAccess(codes, conn):
 
-    query = f"""
-    SELECT code, name,
-    spawn_gradient_min::float, spawn_gradient_max::float
-    FROM {dataSchema}.{appconfig.fishSpeciesTable};
-    """
+    # query = f"""
+    # SELECT code, name,
+    # spawn_gradient_min::float, spawn_gradient_max::float
+    # FROM {dataSchema}.{appconfig.fishSpeciesTable};
+    # """
 
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-        codes = cursor.fetchall()
+    # with conn.cursor() as cursor:
+    #     cursor.execute(query)
+    #     codes = cursor.fetchall()
 
     for c in codes:
         code = c[0]
@@ -593,9 +594,21 @@ def main():
 
     with appconfig.connectdb() as conn:
 
+        global specCodes
+        global species
+
+        specCodes = [substring.strip() for substring in species.split(',')]
+
+        if len(specCodes) == 1:
+            specCodes = f"('{specCodes[0]}')"
+        else:
+            specCodes = tuple(specCodes)
+
         query = f"""
-        SELECT code
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        SELECT code, name,
+        spawn_gradient_min::float, spawn_gradient_max::float
+        FROM {dataSchema}.{appconfig.fishSpeciesTable}
+        WHERE code IN {specCodes};
         """
 
         with conn.cursor() as cursor:

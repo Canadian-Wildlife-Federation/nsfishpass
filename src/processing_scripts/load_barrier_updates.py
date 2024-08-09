@@ -46,19 +46,57 @@ watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
 secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 joinDistance = appconfig.config['CROSSINGS']['join_distance']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
+specCodes = appconfig.config[iniSection]['species']
 
-# with appconfig.connectdb() as conn:
-
-#     query = f"""
-#     SELECT code
-#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
-#     """
-
-#     with conn.cursor() as cursor:
-#         cursor.execute(query)
-#         specCodes = cursor.fetchall()
 
 def loadBarrierUpdates(connection):
+
+    # create barrier update table if it doesn't exist
+    global specCodes
+
+    passability_cols  = ''
+
+    for species in specCodes:
+        species = species[0]
+
+        passability_cols = f"""
+            {passability_cols}
+            passability_status_{species} varchar,
+        """
+
+    query = f"""
+        CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{dbTargetTable} (
+            update_id uuid NOT NULL DEFAULT gen_random_uuid(),
+            barrier_id uuid,
+            update_source varchar,
+            update_date date,
+            update_type varchar,
+            site_id varchar,
+            date_examined date,
+            barrier_type varchar,
+            {passability_cols}
+            latitude double precision,
+            longitude double precision,
+            stream_name varchar,
+            road_name varchar,
+            ownership varchar,
+            crossing_subtype varchar,
+            notes varchar,
+            cmm_pt_exists boolean,
+            update_status varchar,
+            geometry geometry(Point,2961),
+            snapped_point geometry(Point,2961),
+            
+
+            PRIMARY KEY (update_id)
+        );
+
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} OWNER TO cwf_analyst;
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query)
+    connection.commit()
         
     # load updates into a table
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
@@ -216,45 +254,6 @@ def processUpdates(connection):
         FROM {dbTargetSchema}.{dbBarrierTable} b
         WHERE b.update_id = {dbTargetSchema}.{dbTargetTable}.update_id::varchar;
 
-        -- salmon
-        INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
-            barrier_id
-            ,species_id
-            ,passability_status
-        )
-        SELECT 
-            b.id
-            , (SELECT id
-                FROM {dbTargetSchema}.fish_species
-                WHERE code = 'as')
-            ,u.passability_status_as
-        FROM {dbTargetSchema}.{dbBarrierTable} b
-        JOIN {dbTargetSchema}.{dbTargetTable} u
-            ON b.update_id = u.update_id::varchar
-        WHERE u.update_type = 'new feature'
-        AND update_status = 'ready';
-
-        -- eel
-        INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
-            barrier_id
-            ,species_id
-            ,passability_status
-        )
-        SELECT 
-            b.id
-            , (SELECT id
-                FROM {dbTargetSchema}.fish_species
-                WHERE code = 'ae')
-            ,CASE 
-                WHEN u.update_source = 'Saint Croix Assessments' AND u.site_id NOT LIKE 'HR_001' THEN '0'
-                ELSE u.passability_status_ae
-            END
-        FROM {dbTargetSchema}.{dbBarrierTable} b
-        JOIN {dbTargetSchema}.{dbTargetTable} u
-            ON b.update_id = u.update_id::varchar
-        WHERE u.update_type = 'new feature'
-        AND update_status = 'ready';
-
 
         UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
 
@@ -273,10 +272,37 @@ def processUpdates(connection):
         cursor.execute(newDeleteQuery)
     connection.commit()
 
+    # passability status 
+    global specCodes
+    for s in specCodes:
+        s = s[0]
+        p_query = f"""
+            INSERT INTO {dbTargetSchema}.{dbPassabilityTable} (
+                barrier_id
+                ,species_id
+                ,passability_status
+            )
+            SELECT 
+                b.id
+                , (SELECT id
+                    FROM {dbTargetSchema}.fish_species
+                    WHERE code = '{s}')
+                ,u.passability_status_{s}
+            FROM {dbTargetSchema}.{dbBarrierTable} b
+            JOIN {dbTargetSchema}.{dbTargetTable} u
+                ON b.update_id = u.update_id::varchar
+            WHERE u.update_type = 'new feature'
+            AND update_status = 'ready';
+        """
+
+    with connection.cursor() as cursor:
+        cursor.execute(p_query)
+    connection.commit()
+
     updatequery = f"""
-        UPDATE cmm.barrier_passability b
+        UPDATE {dbTargetSchema}.barrier_passability b
         SET species_code = f.code
-        FROM cmm.fish_species f 
+        FROM {dbTargetSchema}.fish_species f 
         WHERE f.id = b.species_id;
     """
 
@@ -315,25 +341,25 @@ def processUpdates(connection):
         FROM {dbTargetSchema}.{dbTargetTable} AS a
         WHERE b.id = a.barrier_id
         AND a.update_status = 'ready';
-
-        UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
-        SET
-            passability_status = CASE WHEN a.passability_status_as IS NOT NULL AND a.passability_status_as IS DISTINCT FROM p.passability_status THEN a.passability_status_as ELSE p.passability_status END
-        FROM {dbTargetSchema}.{dbTargetTable} AS a
-        WHERE p.barrier_id = a.barrier_id
-        AND a.update_status = 'ready'
-        AND p.species_code = 'as';
-
-        UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
-        SET
-            passability_status = CASE WHEN a.passability_status_ae IS NOT NULL AND a.passability_status_ae IS DISTINCT FROM p.passability_status THEN a.passability_status_ae ELSE p.passability_status END
-        FROM {dbTargetSchema}.{dbTargetTable} AS a
-        WHERE p.barrier_id = a.barrier_id
-        AND a.update_status = 'ready'
-        AND p.species_code = 'ae';
-
-        
     """
+    # update passability
+    for s in specCodes:
+        s = s[0]
+        mappingQuery = f"""
+            {mappingQuery}
+
+            UPDATE {dbTargetSchema}.{dbPassabilityTable} AS p
+            SET
+                passability_status = 
+                    CASE WHEN a.passability_status_{s} IS NOT NULL 
+                        AND a.passability_status_{s} IS DISTINCT FROM p.passability_status 
+                        THEN a.passability_status_{s} 
+                    ELSE p.passability_status END
+            FROM {dbTargetSchema}.{dbTargetTable} AS a
+            WHERE p.barrier_id = a.barrier_id
+            AND a.update_status = 'ready'
+            AND p.species_code = '{s}';
+        """ 
 
     processMultiple(connection)
 
@@ -349,15 +375,15 @@ def processUpdates(connection):
         cursor.execute(removeDuplicatesQuery)
     connection.commit()
 
-    # get secondary watershed names
-    query = f"""
-    --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
-    UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
-    """
+    if secondaryWatershedTable != 'None':
+        # get secondary watershed names
+        query = f"""
+        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+        """
 
-    with connection.cursor() as cursor:
-        cursor.execute(query)
-    connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
 
 def matchArchive(connection):
 
@@ -410,12 +436,20 @@ def main():
 
         conn.autocommit = False
 
+        global specCodes
+
+        specCodes = [substring.strip() for substring in specCodes.split(',')]
+
+        if len(specCodes) == 1:
+            specCodes = f"('{specCodes[0]}')"
+        else:
+            specCodes = tuple(specCodes)
+
         query = f"""
         SELECT code
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        FROM {dataSchema}.{appconfig.fishSpeciesTable}
+        WHERE code IN {specCodes};
         """
-
-        global specCodes
 
         with conn.cursor() as cursor:
             cursor.execute(query)

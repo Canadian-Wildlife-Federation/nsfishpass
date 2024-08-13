@@ -371,6 +371,12 @@ def loadToBarriers(connection):
         with connection.cursor() as cursor:
             cursor.execute(query)
         connection.commit()
+    else:
+        # defualt to wcrp name
+        query = f"UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = '{iniSection}'"
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
 
     query = f"""
         SELECT id 
@@ -446,41 +452,62 @@ def main():
 
         result = tableExists(conn)
 
-        if result:
+        print("  creating tables")
+        createTable(conn)
+        
+        print("  computing modelled crossings")
+        computeCrossings(conn)
 
-            print("  creating tables")
-            createTable(conn)
-            
-            print("  computing modelled crossings")
-            computeCrossings(conn)
+        if result:
 
             print("  matching to archived crossings")
             matchArchive(conn)
             
             conn.commit()
 
-            print("  calculating modelled crossing attributes")
-            computeAttributes(conn)
+        print("  calculating modelled crossing attributes")
+        computeAttributes(conn)
 
-            print("  loading to barriers table")
-            loadToBarriers(conn)
-            
-            conn.commit()
+        print("  loading to barriers table")
+        loadToBarriers(conn)
         
-        else:
-            print("  creating tables")
-            createTable(conn)
-            
-            print("  computing modelled crossings")
-            computeCrossings(conn)
+        conn.commit()
 
-            print("  calculating modelled crossing attributes")
-            computeAttributes(conn)
+        # if result:
 
-            print("  loading to barriers table")
-            loadToBarriers(conn)
+        #     print("  creating tables")
+        #     createTable(conn)
             
-            conn.commit()
+        #     print("  computing modelled crossings")
+        #     computeCrossings(conn)
+
+        #     print("  matching to archived crossings")
+        #     matchArchive(conn)
+            
+        #     conn.commit()
+
+        #     print("  calculating modelled crossing attributes")
+        #     computeAttributes(conn)
+
+        #     print("  loading to barriers table")
+        #     loadToBarriers(conn)
+            
+        #     conn.commit()
+        
+        # else:
+        #     print("  creating tables")
+        #     createTable(conn)
+            
+        #     print("  computing modelled crossings")
+        #     computeCrossings(conn)
+
+        #     print("  calculating modelled crossing attributes")
+        #     computeAttributes(conn)
+
+        #     print("  loading to barriers table")
+        #     loadToBarriers(conn)
+            
+        #     conn.commit()
                 
     print("done")
 

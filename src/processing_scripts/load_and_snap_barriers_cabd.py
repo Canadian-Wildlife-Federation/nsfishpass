@@ -235,7 +235,14 @@ def main():
             --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
             UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
             """
-
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+            conn.commit()
+        else:
+            # default call secondary watershed by wcrp name
+            query = f"""
+            UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = '{iniSection}';
+            """
             with conn.cursor() as cursor:
                 cursor.execute(query)
             conn.commit()
@@ -357,8 +364,11 @@ def main():
         joinString = ''
         conditionString = ''
         for i in range(len(specCodes)):
-            code = specCodes[i][0]
-            col = f'p{i}.passability_status AS passability_status_{code}'
+            code = specCodes[i]
+            col = f"""
+            b.dci_{code},
+            p{i}.passability_status AS passability_status_{code}
+            """
             cols.append(col)
             joinString = joinString + f'JOIN {dbTargetSchema}.{dbPassabilityTable} p{i} ON b.id = p{i}.barrier_id\n'
             joinString = joinString + f'JOIN {dbTargetSchema}.fish_species f{i} ON f{i}.id = p{i}.species_id\n'
@@ -402,7 +412,7 @@ def main():
                 b.road,
                 b.culvert_type,
                 b.culvert_condition,
-                b.action_items, 
+                b.action_items,
                 b.passability_status_notes,
                 {colString}
             FROM {dbTargetSchema}.{dbBarrierTable} b

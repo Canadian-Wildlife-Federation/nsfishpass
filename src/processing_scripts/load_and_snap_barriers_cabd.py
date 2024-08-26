@@ -366,7 +366,6 @@ def main():
         for i in range(len(specCodes)):
             code = specCodes[i]
             col = f"""
-            b.dci_{code},
             p{i}.passability_status AS passability_status_{code}
             """
             cols.append(col)

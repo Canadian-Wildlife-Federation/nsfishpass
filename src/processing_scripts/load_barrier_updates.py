@@ -232,14 +232,16 @@ def processUpdates(connection):
     newDeleteQuery = f"""
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
-            update_id, original_point, type, owner, 
+            update_id,
+            original_point, type, owner, 
             passability_status_notes,
             stream_name, date_examined,
             transport_feature_name,
             cmm_pt_exists
             )
         SELECT 
-            update_id, ST_Transform(geometry, 2961), barrier_type, ownership, 
+            update_id, 
+            ST_Transform(geometry, 2961), barrier_type, ownership, 
             notes,
             stream_name, date_examined,
             road_name,
@@ -253,9 +255,6 @@ def processUpdates(connection):
         SET barrier_id = b.id
         FROM {dbTargetSchema}.{dbBarrierTable} b
         WHERE b.update_id = {dbTargetSchema}.{dbTargetTable}.update_id::varchar;
-
-
-        UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
 
         -- deleted points
         DELETE FROM {dbTargetSchema}.{dbBarrierTable}
@@ -293,11 +292,13 @@ def processUpdates(connection):
                 ON b.update_id = u.update_id::varchar
             WHERE u.update_type = 'new feature'
             AND update_status = 'ready';
+
+            UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
         """
 
-    with connection.cursor() as cursor:
-        cursor.execute(p_query)
-    connection.commit()
+        with connection.cursor() as cursor:
+            cursor.execute(p_query)
+        connection.commit()
 
     updatequery = f"""
         UPDATE {dbTargetSchema}.barrier_passability b
@@ -463,15 +464,15 @@ def main():
         
         print("  joining update points to barriers")
         joinBarrierUpdates(conn)
+
+        result = tableExists(conn)
+        
+        if result:
+            matchArchive(conn)
         
         print("  processing updates")
         processUpdates(conn)
 
-        # result = tableExists(conn)
-        
-        # if result:
-        #     matchArchive(conn)
-        
     print("done")
     
 if __name__ == "__main__":

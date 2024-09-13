@@ -212,7 +212,7 @@ def loadRoads(conn):
     query = f"""
     --CREATE INDEX {appconfig.dataSchema}_{roadTable}_geometry on {appconfig.dataSchema}.{roadTable} using gist(geometry);
 
-    ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN watershed_name varchar;
+    ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN IF NOT EXISTS watershed_name varchar;
 
     ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
     """

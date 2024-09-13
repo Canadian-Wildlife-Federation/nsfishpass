@@ -23,6 +23,8 @@
 import appconfig
 from imagecodecs.imagecodecs import NONE
 
+import sys
+
 iniSection = appconfig.args.args[0]
 dataSchema = appconfig.config['DATABASE']['data_schema']
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
@@ -64,9 +66,10 @@ def insertPassability(conn, passability_data):
         INSERT INTO {dbTargetSchema}.barrier_passability (
             barrier_id
             ,species_id
+            ,species_code
             ,passability_status
         )
-        VALUES(%s, %s, %s);
+        VALUES(%s, %s, %s, %s);
     """
 
     with conn.cursor() as cursor:
@@ -105,8 +108,6 @@ def breakstreams (conn):
             SELECT snapped_point, id, type
             FROM {dbTargetSchema}.{dbBarrierTable};
 
-        -- Need to figure out why adding in this query causes the accessibility model
-        -- to mark almost everything as accessible
         --habitat and accessibility updates
         --INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
         --    SELECT snapped_point, id, update_type
@@ -226,7 +227,7 @@ def breakstreams (conn):
         query = f"""
             SELECT id
             FROM {dbTargetSchema}.{dbGradientBarrierTable}
-            WHERE id NOT IN (SELECT id FROM {dbTargetSchema}.{dbGradientBarrierTable})
+            WHERE id NOT IN (SELECT barrier_id FROM {dbTargetSchema}.barrier_passability)
         """
 
         with conn.cursor() as cursor:
@@ -235,7 +236,7 @@ def breakstreams (conn):
         conn.commit()
 
         query = f"""
-            SELECT id
+            SELECT id, code
             FROM {dbTargetSchema}.fish_species
             WHERE code = '{code}'
         """ 
@@ -246,7 +247,7 @@ def breakstreams (conn):
         conn.commit()
 
         query = f"""
-            SELECT id
+            SELECT id, code
             FROM {dbTargetSchema}.fish_species
             WHERE code != '{code}'
         """
@@ -265,10 +266,12 @@ def breakstreams (conn):
             for s in species:
                 passability_feature.append(feature[0])
                 passability_feature.append(s[0])
+                passability_feature.append(s[1])
                 passability_feature.append(0)
             for s in other_species:
                 other_passability_feature.append(feature[0])
                 other_passability_feature.append(s[0])
+                other_passability_feature.append(s[1])
                 other_passability_feature.append(1)
             if len(passability_feature) != 0:
                 passability_data.append(passability_feature)

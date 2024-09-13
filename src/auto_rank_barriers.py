@@ -87,10 +87,10 @@ SELECT b.id
     ,b.original_point
     ,b.snapped_point
     ,b.stream_id_up
-    ,b.func_upstr_hab_{species_code}
+    ,b.func_upstr_hab_{species_code} 
     ,b.total_upstr_hab_{species_code}
-    ,b.w_func_upstr_hab_{species_code}
-    ,b.w_total_upstr_hab_{species_code}
+    ,b.w_func_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_func_upstr_hab_{species_code}
+    ,b.w_total_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_total_upstr_hab_{species_code}
 	,bp.passability_status INTO {wcrp}.ranked_barriers_{species_code}_{watershed}
 FROM {wcrp}.barriers b
 JOIN barrier_passability_{species_code} bp
@@ -278,14 +278,14 @@ ADD rank_w_avg_gain_tiered numeric;
 WITH sorted AS (
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,passability_status
-		,ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier * (1 - passability_status::double precision) DESC) as row_num
+		,ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
 	FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
 	WHERE w_avg_gain_per_barrier >= 0.5
 	UNION ALL
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
 		,passability_status
 		,(SELECT MAX(row_num) FROM (
-			SELECT ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier * (1 - passability_status::double precision) DESC) as row_num
+			SELECT ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
 			FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
 			WHERE w_avg_gain_per_barrier >= 0.5
 		) AS subquery) + ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num 
@@ -311,7 +311,7 @@ ADD rank_w_total_upstr_hab numeric;
 
 WITH sorted AS (
 	SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
-		,ROW_NUMBER() OVER(ORDER BY w_total_upstr_hab_{species_code} * (1 - passability_status::double precision) DESC) as row_num
+		,ROW_NUMBER() OVER(ORDER BY w_total_upstr_hab_{species_code} DESC) as row_num
 	FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
 ),
 ranks AS (

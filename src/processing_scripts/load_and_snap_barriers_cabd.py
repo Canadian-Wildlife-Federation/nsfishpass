@@ -105,6 +105,8 @@ def main():
 
                 dam_use varchar,
 
+                fall_height_m real,
+
                 stream_name varchar,
                 strahler_order integer,
                 stream_id uuid,
@@ -199,6 +201,40 @@ def main():
                 cursor.execute(insertquery, feature)
         conn.commit()
 
+        # retrieve waterfall data from CABD API
+        url = f"https://cabd-web.azurewebsites.net/cabd-api/features/waterfalls?&filter=nhn_watershed_id:in:{nhnWatershedId}"
+        response = urllib.request.urlopen(url)
+        data = json.loads(response.read())
+
+        feature_data = data["features"]
+        output_data = []
+
+        for feature in feature_data:
+            output_feature = []
+            output_feature.append(feature["properties"]["cabd_id"])
+            output_feature.append(feature["geometry"]["coordinates"][0])
+            output_feature.append(feature["geometry"]["coordinates"][1])
+            output_feature.append(feature["properties"]["fall_name_en"])
+            output_feature.append(feature["properties"]["fall_height_m"])
+            output_feature.append(feature["properties"]["passability_status"])
+            output_data.append(output_feature)
+
+
+        insertquery = f"""
+            INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
+                cabd_id, 
+                original_point,
+                name,
+                fall_height_m,
+                passability_status,
+                type)
+            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s), 'waterfall');
+        """
+        with conn.cursor() as cursor:
+            for feature in output_data:
+                cursor.execute(insertquery, feature)
+        conn.commit()
+
         # snaps barrier features to network
         query = f"""
             CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
@@ -223,7 +259,7 @@ def main():
             --because using nhn_watershed_id can cover multiple watersheds
             DELETE FROM {dbTargetSchema}.{dbBarrierTable}
             WHERE snapped_point IS NULL
-            AND type = 'dam';
+            AND (type = 'dam' OR type = 'waterfall');
         """
         with conn.cursor() as cursor:
             cursor.execute(query)
@@ -392,6 +428,8 @@ def main():
 
                 b.dam_use,
 
+                b.fall_height_m,
+
                 b.stream_name,
                 b.strahler_order,
                 b.wshed_name,
@@ -411,7 +449,7 @@ def main():
                 b.road,
                 b.culvert_type,
                 b.culvert_condition,
-                b.action_items,
+                b.action_items, 
                 b.passability_status_notes,
                 {colString}
             FROM {dbTargetSchema}.{dbBarrierTable} b
@@ -419,7 +457,7 @@ def main():
             WHERE {conditionString};
         """
 
-        # print(query)
+        #print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

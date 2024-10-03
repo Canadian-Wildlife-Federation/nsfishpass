@@ -170,6 +170,9 @@ def deleteIsolated(conn):
 
 
 def main():
+    if iniSection == 'cheticamp':
+        return
+    
     with appconfig.connectdb() as conn:
 
         conn.autocommit = False

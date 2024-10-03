@@ -30,6 +30,7 @@ iniSection = appconfig.args.args[0]
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
 dbWatershedId = appconfig.config[iniSection]['watershed_id']
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
+dbRawDataSchema = appconfig.config['DATABASE']['data_schema']
 workingWatershedId = appconfig.config[iniSection]['watershed_id']
 nhnWatershedId = ast.literal_eval(appconfig.config[iniSection]['nhn_watershed_id'])
 nhnWatershedId = ','.join(nhnWatershedId)
@@ -48,16 +49,6 @@ def main():
         global species
 
         specCodes = [substring.strip() for substring in species.split(',')]
-
-        # query = f"""
-        # SELECT code
-        # FROM {appconfig.dataSchema}.{fishSpeciesTable};
-        # """
-
-        # with conn.cursor() as cursor:
-        #     cursor.execute(query)
-        #     specCodes = cursor.fetchall()
-        # conn.commit()
 
         query = f""" DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; """
         with conn.cursor() as cursor:
@@ -285,7 +276,7 @@ def main():
 
         # Load barrier passability to intermediate table
         query = f"""
-            SELECT id
+            SELECT id, code
             FROM {dbTargetSchema}.fish_species;
         """
 
@@ -294,8 +285,18 @@ def main():
             species = cursor.fetchall()
         conn.commit()
 
+        # get waterfall height thresholds
         query = f"""
-            SELECT id, passability_status 
+            SELECT code, fall_height_threshold
+            FROM {dbRawDataSchema}.fish_species;
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            fall_heights = cursor.fetchall()
+        conn.commit()
+
+        query = f"""
+            SELECT id, passability_status, type, fall_height_m
             FROM {dbTargetSchema}.{dbBarrierTable};
         """
 
@@ -309,10 +310,23 @@ def main():
         # Get data for passability table
         for feature in feature_data:
             for s in species:
+                # acquire fall height threshold for this species
+                for h in fall_heights:
+                    if s[1] == h[0]:
+                        fall_height_threshold = h[1]
                 passability_feature = []
                 passability_feature.append(feature[0])
                 passability_feature.append(s[0])
-                passability_feature.append(feature[1])
+                # assign passability
+                if feature[2] == 'waterfall' and feature[3]:
+                    if float(feature[3]) >= fall_height_threshold:
+                        passability_feature.append('BARRIER')
+                    else:
+                        passability_feature.append('PASSABLE')
+                elif feature[2] == 'waterfall':     # Waterfalls with unknown height are passable
+                    passability_feature.append('PASSABLE')
+                else:
+                    passability_feature.append(feature[1])
                 passability_data.append(passability_feature)
                         
         insertquery = f"""
@@ -390,74 +404,6 @@ def main():
             drop column if exists passability_status cascade;
         """
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-        conn.commit()
-
-        # create view combining barrier and passability table
-        # programmatically build columns, joins, and conditions based on species in species table
-        cols = []
-        joinString = ''
-        conditionString = ''
-        for i in range(len(specCodes)):
-            code = specCodes[i]
-            col = f"""
-            p{i}.passability_status AS passability_status_{code}
-            """
-            cols.append(col)
-            joinString = joinString + f'JOIN {dbTargetSchema}.{dbPassabilityTable} p{i} ON b.id = p{i}.barrier_id\n'
-            joinString = joinString + f'JOIN {dbTargetSchema}.fish_species f{i} ON f{i}.id = p{i}.species_id\n'
-            if i == 0:
-                conditionString = conditionString + f'f{i}.code = \'{code}\'\n'
-            else:
-                conditionString = conditionString + f'AND f{i}.code = \'{code}\'\n' 
-        colString = ','.join(cols)
-
-        query = f"""
-            CREATE VIEW {dbTargetSchema}.barrier_passability_view AS 
-            SELECT 
-                b.id,
-                b.cabd_id,
-                b.modelled_id,
-                b.update_id,
-                b.original_point,
-                b.snapped_point,
-                b.name,
-                b.type,
-                b.owner,
-
-                b.dam_use,
-
-                b.fall_height_m,
-
-                b.stream_name,
-                b.strahler_order,
-                b.wshed_name,
-                b.secondary_wshed_name,
-                b.transport_feature_name,
-
-                b.critical_habitat,
-                
-                b.crossing_status,
-                b.crossing_feature_type,
-                b.crossing_type,
-                b.crossing_subtype,
-                
-                b.culvert_number,
-                b.structure_id,
-                b.date_examined,
-                b.road,
-                b.culvert_type,
-                b.culvert_condition,
-                b.action_items, 
-                b.passability_status_notes,
-                {colString}
-            FROM {dbTargetSchema}.{dbBarrierTable} b
-            {joinString}
-            WHERE {conditionString};
-        """
-
-        #print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

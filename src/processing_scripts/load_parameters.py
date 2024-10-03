@@ -56,6 +56,7 @@ def main():
                 mi_kmaw_name varchar,
                 
                 accessibility_gradient double precision not null,
+                fall_height_threshold double precision not null,
                 
                 spawn_gradient_min numeric,
                 spawn_gradient_max numeric,
@@ -86,6 +87,7 @@ def main():
                 mi_kmaw_name,
 
                 accessibility_gradient,
+                fall_height_threshold,
 
                 spawn_gradient_min,
                 spawn_gradient_max,
@@ -108,6 +110,7 @@ def main():
                 a.mi_kmaw_name,
 
                 a.accessibility_gradient,
+                a.fall_height_threshold,
 
                 a.spawn_gradient_min,
                 a.spawn_gradient_max,

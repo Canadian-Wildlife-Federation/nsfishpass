@@ -30,6 +30,9 @@ datatable = dbTargetSchema + ".aquatic_invasive_species"
 
 def main():
 
+    if iniSection != 'cmm':
+        return
+
     with appconfig.connectdb() as conn:
         query = f"""
             ALTER TABLE {datatable} ADD COLUMN IF NOT EXISTS stream_id uuid;

@@ -34,6 +34,9 @@ elif watershed == 'st_croix':
 elif watershed == 'msa':
     watershed_name = watershed
     wcrp = 'msa'
+elif watershed == 'cheticamp':
+    watershed_name = watershed
+    wcrp = 'cheticamp'
 else:
     print('INVALID WATERSHED NAME')
     sys.exit()
@@ -98,6 +101,7 @@ JOIN barrier_passability_{species_code} bp
 WHERE b.secondary_wshed_name = '{watershed_name}'
 	AND bp.passability_status != '1' 
 	AND b.total_upstr_hab_{species_code} != 0
+    AND b.type != 'waterfall'
 ORDER BY dci_{species_code} DESC;
 
 ALTER TABLE IF EXISTS {wcrp}.ranked_barriers_{species_code}_{watershed}

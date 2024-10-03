@@ -45,6 +45,9 @@ from processing_scripts import assign_habitat
 from processing_scripts import compute_barriers_upstream_values
 from processing_scripts import compute_barrier_dci
 from processing_scripts import remove_isolated_flowpaths
+from processing_scripts import load_ais
+from processing_scripts import barrier_passability_view
+from processing_scripts import rank_barriers
 
 
 iniSection = appconfig.args.args[0]
@@ -59,7 +62,7 @@ remove_isolated_flowpaths.main()
 load_and_snap_barriers_cabd.main()
 # load_and_snap_fishobservation.main()
 compute_modelled_crossings.main()
-load_barrier_updates.main() 
+load_barrier_updates.main()
 compute_mainstems.main()
 assign_raw_z.main()
 smooth_z.main()
@@ -76,7 +79,10 @@ compute_accessibility.main()
 assign_habitat.main()
 process_habitat_access_updates.main()
 compute_barriers_upstream_values.main()
+load_ais.main()
 compute_barrier_dci.main()
+rank_barriers.main()
+barrier_passability_view.main()
 
 
 print ("Processing Complete: " + workingWatershedId)

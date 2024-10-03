@@ -191,7 +191,7 @@ def createNetwork(connection, code):
         {dbTargetSchema}.{dbTargetStreamTable} b
         where st_dwithin(b.geometry, a.point, 0.01)
             and st_dwithin(st_startpoint(b.geometry), a.point, 0.01)
-            and a.type = 'gradient_barrier'
+            and (a.type = 'gradient_barrier' or a.type = 'waterfall')
             and f.code = '{code}'
             and p.passability_status != '1'
         union 
@@ -202,7 +202,7 @@ def createNetwork(connection, code):
         {dbTargetSchema}.{dbTargetStreamTable} b
         where st_dwithin(b.geometry, a.point, 0.01)
             and st_dwithin(st_endpoint(b.geometry), a.point, 0.01)
-            and a.type = 'gradient_barrier'
+            and (a.type = 'gradient_barrier' or a.type = 'waterfall')
             and f.code = '{code}'
             and p.passability_status != '1'
     """

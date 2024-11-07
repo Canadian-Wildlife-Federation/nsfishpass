@@ -576,7 +576,7 @@ begin
 		tt.notes,
 		tt.supporting_links
 		from %I.barrier_passability_view bp
-		join %I.%I tt on 
+		right join %I.%I tt on 
 			(case 
 			 when bp.cabd_id is not null then cast(bp.cabd_id as varchar)
 			 else cast(bp.modelled_id as varchar)

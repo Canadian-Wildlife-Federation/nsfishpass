@@ -22,9 +22,6 @@
 
 import appconfig
 
-iniSection = appconfig.args.args[0]
-species = appconfig.config[iniSection]['species']
-
 
 def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     """
@@ -376,11 +373,8 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
 
 
 def main():
-    global species
-    global iniSection
-
-    wcrp = iniSection
-    specCodes = [substring.strip() for substring in species.split(',')]
+    wcrp = appconfig.iniSection
+    specCodes = appconfig.getSpecies()
     with appconfig.connectdb() as conn:
         conn.autocommit = False
 

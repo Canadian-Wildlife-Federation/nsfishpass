@@ -222,4 +222,383 @@ with appconfig.connectdb() as conn:
     with conn.cursor() as cursor:
         cursor.execute(query)
 
+## Set up ENUM types for tracking table dropdowns
+query = f"""
+drop type if exists
+	tt_structure_type,
+	tt_structure_list_status_type,
+	tt_passability_asmt_type,
+	tt_assessment_step_type,
+	tt_excl_reason_type,
+	tt_excl_method_type,
+	tt_partial_passability_type,
+	tt_partial_passability_notes_type,
+	tt_upstr_hab_quality_type,
+	tt_constructability_type,
+	tt_priority_type,
+	tt_rehab_type;
+	
+CREATE TYPE tt_structure_type AS ENUM
+    ('Dam', 'Stream crossing - OBS', 'Stream crossing - CBS', 'Stream crossing - Ford', 'Aboiteaux', 'Other', 'None', '');
+	
+CREATE TYPE tt_structure_list_status_type AS ENUM
+    ('Assessed structure that remains data deficient', 'Confirmed barrier', 'Rehabilitated barrier', 'Excluded structure', '');
+	
+create type tt_passability_asmt_type as enum
+	('Informal assessment', 'Rapid assessment', 'Full assessment', '');
+	
+CREATE TYPE tt_assessment_step_type AS ENUM
+    ('Informal assessment', 
+	 'Barrier assessment', 
+	 'Habitat confirmation', 
+	 'Detailed habitat investigation', 
+	 'Engineering design', 
+	 'Rehabilitated', 
+	 'Post-rehabilitation monitoring', 
+	 'Other',
+	 '');
+	 
+CREATE TYPE tt_excl_reason_type AS ENUM
+    ('Passable', 'No structure', 'No key upstream habitat', 'No structure and key upstream habitat', '');
+	
+CREATE TYPE tt_excl_method_type AS ENUM
+    ('Imagery review', 'Informal assessment', 'Field assessment', 'Local knowledge', '');
+	
+CREATE TYPE tt_partial_passability_type AS ENUM
+    ('Yes', 'No', 'Unknown');
+	
+CREATE TYPE tt_partial_passability_notes_type AS ENUM
+    ('Proportion of individuals', 'Proportion of time', '');
+	
+CREATE TYPE tt_upstr_hab_quality_type AS ENUM
+    ('High', 'Medium', 'Low', 'N/A or unassessed');
+	
+create type tt_constructability_type as enum (
+	'Difficult',
+	'Moderate',
+	'Easy',
+	''
+);
+
+CREATE TYPE tt_priority_type AS ENUM
+    ('High', 'Medium', 'Low', 'Non-actionable', '');
+	
+	
+CREATE TYPE tt_rehab_type AS ENUM
+    ('Removal/decommissioned', 'Replacement - OBS', 'Replacement - CBS', 'Retrofit', '');
+	
+CREATE TYPE tt_next_steps_type AS ENUM
+    ('Barrier assessment (data deficient structures only)', 
+	 'Habitat confirmation (data deficient structures only)',
+	 'In-depth habitat investigation (data deficient structures only)',
+	 'In-depth passage assessment (data deficient structures only)', 
+	 'Engage with barrier owner', 
+	 'Bring barrier to regulator',
+	 'Commission engineering designs', 
+	 'Leave until end of lifecycle', 
+	 'Identify barrier owner', 
+	 'Engage in public consultation',
+	 'Fundraise', 
+	 'Rehabilitation',
+	 'Post-rehabilitation monitoring',
+	 'N/A - project complete (rehabilitated structures only)', 
+	 'Engage with partners',
+	 'Barrier reassessment',
+	 'Non-actionable',
+	 ''
+	);
+"""
+
+with appconfig.connectdb() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+
+## Add function to change blank values to null in tracking tables
+query = f"""
+-- Trigger to set blank values to null
+create or replace function blank2null()
+	returns trigger
+	language plpgsql as
+$func$
+begin
+	if NEW.structure_list_status = '' then
+		NEW.structure_list_status = NULL;
+	end if;
+	
+	if NEW.structure_type = '' then
+		NEW.structure_type = NULL;
+	end if;
+	
+	if NEW.assessment_step_completed = '' then
+		NEW.assessment_step_completed = NULL;
+	end if;
+	
+	if NEW.reason_for_exclusion = '' then
+		NEW.reason_for_exclusion = NULL;
+	end if;
+	
+	if NEW.method_of_exclusion = '' then
+		NEW.method_of_exclusion = NULL;
+	end if;
+	
+	if NEW.partial_passability_notes = '' then
+		NEW.partial_passability_notes = NULL;
+	end if;
+	
+	if NEW.constructability = '' then
+		NEW.constructability = NULL;
+	end if;
+	
+	if NEW.priority = '' then
+		NEW.priority = NULL;
+	end if;
+	
+	if NEW.type_of_rehabilitation = '' then
+		NEW.type_of_rehabilitation = NULL;
+	end if;
+	
+	if NEW.next_steps = '' then
+		NEW.next_steps = NULL;
+	end if;
+	
+	return NEW;
+end
+$func$;
+"""
+
+with appconfig.connectdb() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+
+## Create function to create tracking tables
+# New tracking tables should be created manually using this function
+query = f"""
+create or replace function create_tracking_table(p_wcrp text, p_species text[])
+	returns void
+as
+$$
+declare 
+	struct_list_status_cols text = '';
+	partial_pass_cols text = '';
+	species_name text;
+	v_schema_name text;
+	v_table_name text;
+	i integer;
+	table_exists boolean;
+begin 
+
+	v_schema_name := p_wcrp;
+	
+	if p_wcrp = 'cmm' then
+		v_table_name = 'combined_tracking_table_st_croix';
+	else
+		v_table_name = 'combined_tracking_table_' || p_wcrp;
+	end if;
+	
+	for i in 1..array_length(p_species, 1) loop
+		species_name := p_species[i];
+		struct_list_status_cols := struct_list_status_cols || format('structure_list_status_%s tt_structure_list_status_type, ', species_name);
+		partial_pass_cols := partial_pass_cols || format('partial_passability_%s tt_partial_passability_type, ', species_name);
+		partial_pass_cols := partial_pass_cols || format('partial_passability_notes_%s tt_partial_passability_notes_type, ', species_name);
+	end loop;
+		
+	execute format(
+		'CREATE TABLE IF NOT EXISTS %I.%I
+		(
+			internal_name varchar,
+			barrier_id varchar PRIMARY KEY,
+			watercourse_name varchar,
+			road_name varchar,
+			structure_type tt_structure_type,
+			structure_owner varchar,
+			private_owner_details varchar,
+			%s
+			passability_assessment_type tt_passability_asmt_type,
+			assessment_step_completed tt_assessment_step_type,
+			reason_for_exclusion tt_excl_reason_type,
+			method_of_exclusion tt_excl_method_type,
+			%s
+			upstream_habitat_quality tt_upstr_hab_quality_type,
+			constructability tt_constructability_type,
+			estimated_cost_$ numeric,
+			priority tt_priority_type,
+			type_of_rehabilitation tt_rehab_type,
+			rehabilitated_by varchar,
+			rehabilitated_date date,
+			estimated_rehabilitation_cost_$ numeric,
+			actual_project_cost_$ numeric,
+			next_steps tt_next_steps_type,
+			timeline_for_next_steps date,
+			lead_for_next_steps varchar,
+			others_involved_in_next_steps varchar,
+			reason varchar,
+			notes varchar,
+			supporting_links varchar
+		);',
+		v_schema_name,
+		v_table_name,
+		struct_list_status_cols,
+		partial_pass_cols
+	);
+	
+	
+	
+	SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = v_table_name
+        AND table_schema = v_schema_name
+    ) INTO table_exists;
+	
+	IF table_exists THEN 
+		execute format('ALTER TABLE IF EXISTS %I.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
+    	execute format('REVOKE ALL ON TABLE %I.%I FROM cwf_user;', p_wcrp, v_table_name);
+		execute format('GRANT SELECT ON TABLE %I.%I TO cwf_user;', p_wcrp, v_table_name);
+		execute format('GRANT ALL ON TABLE %I.%I TO cwf_analyst;', p_wcrp, v_table_name);
+		execute format('GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE %I.%I TO fieldingm;', p_wcrp, v_table_name);
+	END IF;  
+	
+end
+$$
+language plpgsql;
+"""
+
+with appconfig.connectdb() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+
+
+## Create function to join the tracking table to the crossings view
+query = f"""
+create or replace function join_tracking_table_crossings_vw(p_wcrp text, p_species text[])
+	returns void
+as
+$$
+declare
+	bp_species_cols text = '';
+	tt_struct_list_status_cols text = '';
+	tt_partial_pass_cols text = '';
+	species_name text;
+	v_table_name text;
+	join_table text;
+	i integer;
+	table_exists boolean;
+begin 
+
+	
+	if p_wcrp = 'cmm' then
+		v_table_name = 'combined_tracking_table_crossings_st_croix_vw';
+		join_table = 'combined_tracking_table_st_croix';
+	else
+		v_table_name = 'combined_tracking_table_crossings_' || p_wcrp || '_vw';
+		join_table = 'combined_tracking_table_' || p_wcrp;
+	end if;
+	
+	for i in 1..array_length(p_species, 1) loop
+		species_name := p_species[i];
+		bp_species_cols := bp_species_cols || format('bp.func_upstr_hab_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.total_upstr_hab_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.w_func_upstr_hab_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.w_total_upstr_hab_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.group_id_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.num_barriers_group_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.downstr_group_ids_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.total_hab_gain_group_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.w_total_hab_gain_group_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.avg_gain_per_barrier_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.w_avg_gain_per_barrier_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.rank_w_avg_gain_tiered_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.rank_w_total_upstr_hab_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.rank_combined_%s,', species_name);
+		bp_species_cols := bp_species_cols || format('bp.passability_status_%s,', species_name);
+		
+		tt_struct_list_status_cols := tt_struct_list_status_cols || format('structure_list_status_%s,', species_name);
+		
+		tt_partial_pass_cols := tt_partial_pass_cols || format('partial_passability_%s,', species_name);
+		tt_partial_pass_cols := tt_partial_pass_cols || format('partial_passability_notes_%s,', species_name);
+	end loop;
+	
+	
+	execute format(
+		'create or replace view %I.%I as
+		select 
+		tt.barrier_id,
+		bp.original_point,
+		bp.snapped_point,
+		bp.name,
+		bp.type,
+		bp.owner,
+		bp.dam_use,
+		bp.fall_height_m,
+		bp.stream_name,
+		bp.strahler_order,
+		bp.wshed_name,
+		bp.secondary_wshed_name,
+		bp.transport_feature_name,
+		bp.critical_habitat,
+		bp.crossing_status,
+		bp.crossing_feature_type,
+		bp.crossing_type,
+		bp.crossing_subtype,
+		bp.culvert_number,
+		bp.culvert_condition,
+		bp.action_items,
+		bp.passability_status_notes,
+		
+		%s
+		
+		tt.internal_name,
+		tt.watercourse_name,
+		tt.road_name,
+		tt.structure_type,
+		tt.structure_owner,
+		tt.private_owner_details,
+		%s
+		tt.passability_assessment_type,
+		tt.assessment_step_completed,
+		tt.reason_for_exclusion,
+		tt.method_of_exclusion,
+		%s
+		tt.upstream_habitat_quality,
+		tt.constructability,
+		tt.estimated_cost_$,
+		tt.priority,
+		tt.type_of_rehabilitation,
+		tt.rehabilitated_by,
+		tt.rehabilitated_date,
+		tt.estimated_rehabilitation_cost_$,
+		tt.actual_project_cost_$,
+		tt.next_steps,
+		tt.timeline_for_next_steps,
+		tt.lead_for_next_steps,
+		tt.others_involved_in_next_steps,
+		tt.reason,
+		tt.notes,
+		tt.supporting_links
+		from %I.barrier_passability_view bp
+		join %I.%I tt on 
+			(case 
+			 when bp.cabd_id is not null then cast(bp.cabd_id as varchar)
+			 else cast(bp.modelled_id as varchar)
+			 end) = tt.barrier_id;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table);
+			 
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_name = v_table_name
+			AND table_schema = p_wcrp
+		) INTO table_exists;
+			
+		IF table_exists THEN 
+			execute format('ALTER TABLE IF EXISTS %I.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
+			execute format('REVOKE ALL ON TABLE %I.%I FROM cwf_user;', p_wcrp, v_table_name);
+			execute format('GRANT ALL ON TABLE %I.%I TO cwf_analyst;', p_wcrp, v_table_name);
+			execute format('GRANT SELECT ON TABLE %I.%I TO cwf_user;', p_wcrp, v_table_name);
+			execute format('GRANT SELECT ON TABLE %I.%I TO fieldingm;', p_wcrp, v_table_name);
+		END IF;
+end
+$$
+language plpgsql;
+"""
+
 print (f"""Database schema {appconfig.dataSchema} created and ready for data """)

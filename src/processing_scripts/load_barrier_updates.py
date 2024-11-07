@@ -467,8 +467,8 @@ def main():
 
         result = tableExists(conn)
         
-        if result:
-            matchArchive(conn)
+        # if result:
+        #     matchArchive(conn)
         
         print("  processing updates")
         processUpdates(conn)

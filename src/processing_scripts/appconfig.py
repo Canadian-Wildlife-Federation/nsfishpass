@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 #----------------------------------------------------------------------------------
+#
+# This script parses the config file and connects to the database.
+# Other scripts use the ConfigParser from this module to parse the config file
+#
+#
 
 import configparser
 import os

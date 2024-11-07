@@ -39,6 +39,7 @@ dbVertexTable = appconfig.config['GRADIENT_PROCESSING']['vertex_gradient_table']
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['smoothedgeometry_field']
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 dbHabAccessUpdates = "habitat_access_updates"
+specCodes = appconfig.config[iniSection]['species']
 
 # stream order segment weighting
 w1 = 0.25
@@ -109,7 +110,7 @@ def breakstreams (conn):
             FROM {dbTargetSchema}.{dbBarrierTable};
 
         --habitat and accessibility updates
-        --INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
+        -- INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
         --    SELECT snapped_point, id, update_type
         --    FROM {dbTargetSchema}.{dbHabAccessUpdates};
 
@@ -120,18 +121,6 @@ def breakstreams (conn):
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
-
-    # removeDuplicatesQuery = f"""
-    #     --delete duplicate points in a narrow tolerance
-    #     DELETE FROM {dbTargetSchema}.{dbGradientBarrierTable} b1
-    #     WHERE EXISTS (SELECT FROM {dbTargetSchema}.{dbGradientBarrierTable} b2
-    #         WHERE b1.id > b2.id
-    #         AND ST_DWithin(b1.point, b2.point, 0.1));
-    # """
-    # # print(removeDuplicatesQuery)
-    # with conn.cursor() as cursor:
-    #     cursor.execute(removeDuplicatesQuery)
-    # conn.commit()
         
     # break at gradient points
 
@@ -144,6 +133,7 @@ def breakstreams (conn):
     mingradient = -1
     
     with conn.cursor() as cursor:
+        # print(query)
         cursor.execute(query)
         features = cursor.fetchall()
         mingradient = features[0][0]
@@ -423,41 +413,6 @@ def updateBarrier(connection):
             WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
     """
 
-    # query = f"""
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} DROP COLUMN IF EXISTS stream_id;
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN IF NOT EXISTS stream_id_up uuid;
-        
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable} SET stream_id_up = null;
-        
-    #     WITH ids AS (
-    #         SELECT a.id as stream_id, b.id as barrier_id
-    #         FROM {dbTargetSchema}.{dbTargetStreamTable} a,
-    #             {dbTargetSchema}.{dbBarrierTable} b
-    #         WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-    #             st_intersects(st_endpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
-    #     )
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable}
-    #         SET stream_id_up = a.stream_id
-    #         FROM ids a
-    #         WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
-            
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN IF NOT EXISTS stream_id_down uuid;
-
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable} SET stream_id_down = null;
-        
-    #     WITH ids AS (
-    #         SELECT a.id as stream_id, b.id as barrier_id
-    #         FROM {dbTargetSchema}.{dbTargetStreamTable} a,
-    #             {dbTargetSchema}.{dbBarrierTable} b
-    #         WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-    #             st_intersects(st_startpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
-    #     )
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable}
-    #         SET stream_id_down = a.stream_id
-    #         FROM ids a
-    #         WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
-    # """
-
     # print(query)
     with connection.cursor() as cursor:
         cursor.execute(query)
@@ -465,12 +420,22 @@ def updateBarrier(connection):
                         
 def main():
     with appconfig.connectdb() as connection:
-        query = f"""
-        SELECT code
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
-        """
 
         global specCodes
+
+        specCodes = [substring.strip() for substring in specCodes.split(',')]
+
+        if len(specCodes) == 1:
+            specCodes = f"('{specCodes[0]}')"
+        else:
+            specCodes = tuple(specCodes)
+
+
+        query = f"""
+        SELECT code
+        FROM {dataSchema}.{appconfig.fishSpeciesTable}
+        WHERE code IN {specCodes};
+        """
 
         with connection.cursor() as cursor:
             cursor.execute(query)

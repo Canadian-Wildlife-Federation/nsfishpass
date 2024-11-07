@@ -16,9 +16,59 @@
 #
 #----------------------------------------------------------------------------------
 
-#
-# Loads dam barriers from the CABD API into local database
-#
+"""
+Loads dam barriers from the CABD API into local database
+
+* OUTPUT
+* Creates and loads
+barriers
+waterfalls
+fish_species
+barrier_passability
+* Drops
+barrier_passability_view
+natural_barriers_vw
+
+
+* PROCESS 
+The Script first drops views created in barrier_passability_view.py 
+since those views depend on tables created in this script.
+
+The fish species table is loaded into the wcrp schema.
+
+The barriers table is created which will hold dams and waterfalls 
+pulled from the CABD along with modelled crossings which will be generated in a later script.
+
+The waterfalls table is created which will only hold waterfalls. 
+In the future, this will be the only place for waterfalls and they will be separated out of barriers 
+but waterfalls are also loaded into barriers since all the calculations work out with the barriers table.
+
+The passability table is created. 
+This table stores the passability for each species for each barrier. 
+This means that each barrier has a record in this table for each species which tracks the passability 
+of that species for that barrier. 
+For example, if there are two species of interest in the watershed, each barrier will have two records in the table.
+
+The CABD API is queried to get dam data which is loaded into the barriers table.
+
+The CABD API is queried to get waterfall data which is loaded into the barriers table and the waterfalls table.
+
+Barriers in the barriers table are snapped to the stream network.
+Waterfalls are snapped to the stream network in the waterfalls table.
+
+Secondary watershed values are defined. 
+By default, this is the same as the wcrp primary watershed name. 
+For CMM, there are 3 secondary watersheds necessitating this part of the script.
+
+Passability values are loaded into the passability table. 
+In the CABD, passability is assigned with a string value 'BARRIER' or 'PASSABLE'. 
+This is translated into 1 and 0 respectively. 
+For waterfalls, the height thresholds are taken from the fish_species table and the passability is assigned by species based on these for each waterfall. 
+
+Passability column is dropped from the barriers table since the info is now in the barrier_passability table.
+
+"""
+
 import appconfig
 import json, urllib.request
 from appconfig import dataSchema
@@ -37,6 +87,7 @@ nhnWatershedId = ','.join(nhnWatershedId)
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
+dbWaterfallTable = appconfig.config['BARRIER_PROCESSING']['waterfalls_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
 secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
@@ -50,12 +101,17 @@ def main():
 
         specCodes = [substring.strip() for substring in species.split(',')]
 
-        query = f""" DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; """
+        query = f""" 
+            DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; 
+            DROP VIEW IF EXISTS {dbTargetSchema}.natural_barriers_vw; 
+        """
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
 
         # create fish species table
+        # TO DO: Only pull species of interest for the wcrp (listed in config file)
+        # Also should probably move this to load_parameters.py or preprocess_watershed.py
         query = f"""
             DROP TABLE IF EXISTS {dbTargetSchema}.fish_species;
             
@@ -133,6 +189,34 @@ def main():
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} OWNER TO cwf_analyst;
             
         """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        # create falls table
+        query = f"""
+            DROP TABLE IF EXISTS {dbTargetSchema}.{dbWaterfallTable};
+
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{dbWaterfallTable} (
+                id uuid not null default gen_random_uuid(),
+                cabd_id uuid,
+                original_point geometry(POINT, {appconfig.dataSrid}),
+                snapped_point geometry(POINT, {appconfig.dataSrid}),
+                name varchar(256),
+                passability_status varchar,
+                passability_status_notes varchar,
+                fall_height_m real,
+                stream_id uuid,
+                wshed_name varchar,
+                secondary_wshed_name varchar,
+
+                primary key (id)
+            );
+
+            ALTER TABLE {dbTargetSchema}.{dbWaterfallTable} OWNER TO cwf_analyst;
+
+        """
+
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
@@ -226,6 +310,22 @@ def main():
                 cursor.execute(insertquery, feature)
         conn.commit()
 
+        # insert into waterfalls table 
+        insertquery = f"""
+            INSERT INTO {dbTargetSchema}.{dbWaterfallTable} (
+                cabd_id, 
+                original_point,
+                name,
+                fall_height_m,
+                passability_status
+            )
+            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s));
+        """
+        with conn.cursor() as cursor:
+            for feature in output_data:
+                cursor.execute(insertquery, feature)
+        conn.commit()
+
         # snaps barrier features to network
         query = f"""
             CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
@@ -256,11 +356,22 @@ def main():
             cursor.execute(query)
         conn.commit()
 
+        # snap waterfalls in waterfalls table and remove unsnapped features
+        query = f"""
+            SELECT public.snap_to_network('{dbTargetSchema}', '{dbWaterfallTable}', 'original_point', 'snapped_point', '{snapDistance}');
+
+            DELETE FROM {dbTargetSchema}.{dbWaterfallTable}
+            WHERE snapped_point IS NULL;
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
         if secondaryWatershedTable != 'None':
             # get secondary watershed names
             query = f"""
-            --UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.original_point, a.geometry);
             UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+            UPDATE {dbTargetSchema}.{dbWaterfallTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
             """
             with conn.cursor() as cursor:
                 cursor.execute(query)
@@ -269,6 +380,7 @@ def main():
             # default call secondary watershed by wcrp name
             query = f"""
             UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = '{iniSection}';
+            UPDATE {dbTargetSchema}.{dbWaterfallTable} b SET secondary_wshed_name = '{iniSection}';
             """
             with conn.cursor() as cursor:
                 cursor.execute(query)
@@ -374,30 +486,6 @@ def main():
         conn.commit()
          
         print("Loading barriers from CABD dataset complete")
-
-
-        # add species-specific passability fields
-        # for species in specCodes:
-        #     code = species[0]
-
-        #     colname = "passability_status_" + code
-            
-        #     query = f"""
-        #         alter table {dbTargetSchema}.{dbBarrierTable} 
-        #         add column if not exists {colname} numeric;
-    
-        #         update {dbTargetSchema}.{dbBarrierTable}
-        #         set {colname} = 
-        #             CASE
-        #             WHEN passability_status = 'BARRIER' THEN 0
-        #             WHEN passability_status = 'UNKNOWN' THEN 0
-        #             WHEN passability_status = 'PARTIAL BARRIER' THEN 0.5
-        #             WHEN passability_status = 'PASSABLE' THEN 1
-        #             ELSE NULL END;
-        #     """
-
-        #     with conn.cursor() as cursor:
-        #         cursor.execute(query)
         
         query = f"""
             alter table {dbTargetSchema}.{dbBarrierTable} 

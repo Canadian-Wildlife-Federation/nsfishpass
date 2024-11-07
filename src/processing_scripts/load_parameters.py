@@ -26,9 +26,12 @@
 import appconfig
 import subprocess
 
-dataFile = appconfig.config['DATABASE']['fish_parameters']
+# dataFile = appconfig.config['DATABASE']['fish_parameters']
 sourceTable = appconfig.dataSchema + ".fish_species_raw"
-fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+# fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+
+dataFile = appconfig.fish_parameters
+fishSpeciesTable = appconfig.fishSpeciesTable
 
 def main():
     with appconfig.connectdb() as conn:

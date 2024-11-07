@@ -66,8 +66,6 @@ def loadWatersheds(conn):
 
 def loadSecondaryWatersheds(conn):
     print("Loading secondary watershed boundaries")
-    # layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix", "cmm_shore_direct_1", "cmm_shore_direct_2", "cmm_shore_direct_3"]
-    #layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
     layers = [secondaryWatershedTable]
 
     if secondaryWatershedTable == 'None':

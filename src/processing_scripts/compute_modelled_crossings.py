@@ -21,7 +21,19 @@
 # with road/trail network) and attributes that can be derived
 # from the stream network
 #
+
+"""
+* OUTPUT
+* Creates and loads
+modelled_crossings
+modelled_crossings_archive (if modelled_crossings exists)
+* Modifies
+barriers - all modelled crossings are added to the barriers table
+barrier_passability - passability for all crossings are added to the passability table
+
+"""
 import appconfig
+
 from appconfig import dataSchema
 
 iniSection = appconfig.args.args[0]
@@ -41,18 +53,11 @@ dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
 
-# with appconfig.connectdb() as conn:
-
-#     query = f"""
-#     SELECT code
-#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
-#     """
-
-#     with conn.cursor() as cursor:
-#         cursor.execute(query)
-#         specCodes = cursor.fetchall()
-
 def tableExists(connection):
+    """
+    Returns whether the modelled crossings table exists in the database already
+    Necessary for creating the archive
+    """
 
     query = f"""
     SELECT EXISTS(SELECT 1 FROM information_schema.tables 
@@ -472,42 +477,6 @@ def main():
         loadToBarriers(conn)
         
         conn.commit()
-
-        # if result:
-
-        #     print("  creating tables")
-        #     createTable(conn)
-            
-        #     print("  computing modelled crossings")
-        #     computeCrossings(conn)
-
-        #     print("  matching to archived crossings")
-        #     matchArchive(conn)
-            
-        #     conn.commit()
-
-        #     print("  calculating modelled crossing attributes")
-        #     computeAttributes(conn)
-
-        #     print("  loading to barriers table")
-        #     loadToBarriers(conn)
-            
-        #     conn.commit()
-        
-        # else:
-        #     print("  creating tables")
-        #     createTable(conn)
-            
-        #     print("  computing modelled crossings")
-        #     computeCrossings(conn)
-
-        #     print("  calculating modelled crossing attributes")
-        #     computeAttributes(conn)
-
-        #     print("  loading to barriers table")
-        #     loadToBarriers(conn)
-            
-        #     conn.commit()
                 
     print("done")
 

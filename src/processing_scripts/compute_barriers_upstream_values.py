@@ -573,7 +573,6 @@ def writeResults(connection):
             WHERE a.stream_id = b.id AND
                   a.stream_id = {dbTargetSchema}.{dbBarrierTable}.stream_id_up;
 
-
             --total upstream habitat
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} DROP COLUMN IF EXISTS total_upstr_hab_spawn_{fish};
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN total_upstr_hab_spawn_{fish} double precision;

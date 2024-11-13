@@ -223,6 +223,11 @@ with appconfig.connectdb() as conn:
         cursor.execute(query)
 
 ## Set up ENUM types for tracking table dropdowns
+# In QGIS, fields with an ENUM type can be edited via
+# a user-friendly dropdown.
+# This allows for columns where the value must be one of
+# a predefined set of values and the options will
+# conventiently show up when a user edits the field in QGIS
 query = f"""
 drop type if exists
 	tt_structure_type,
@@ -314,6 +319,10 @@ with appconfig.connectdb() as conn:
         cursor.execute(query)
 
 ## Add function to change blank values to null in tracking tables
+# ENUM types support NULL values but when a layer with an ENUM is 
+# brought into QGIS, th field can only be updated to values defined in the ENUM
+# Therefore, all ENUM types define a blank ('') option and the
+# following trigger changes such values to NULL in the database.
 query = f"""
 -- Trigger to set blank values to null
 create or replace function blank2null()
@@ -372,6 +381,8 @@ with appconfig.connectdb() as conn:
 
 ## Create function to create tracking tables
 # New tracking tables should be created manually using this function
+# Tracking tables are combined under one table in the database called <wcrp>.combined_tracking_table_<watershed> (eg. cmm.combined_tracking_table_st_croix). 
+# The table is only editable by the biologist for the WCRP. 
 query = f"""
 create or replace function create_tracking_table(p_wcrp text, p_species text[])
 	returns void
@@ -478,6 +489,7 @@ declare
 	bp_species_cols text = '';
 	tt_struct_list_status_cols text = '';
 	tt_partial_pass_cols text = '';
+    upstr_hab_condition text = '';
 	species_name text;
 	v_table_name text;
 	join_table text;
@@ -516,6 +528,12 @@ begin
 		
 		tt_partial_pass_cols := tt_partial_pass_cols || format('partial_passability_%s,', species_name);
 		tt_partial_pass_cols := tt_partial_pass_cols || format('partial_passability_notes_%s,', species_name);
+        
+        if i = 1 then
+			upstr_hab_condition := format('bp.total_upstr_hab_%s > 0', species_name);
+		else
+			upstr_hab_condition := upstr_hab_condition || format(' or bp.total_upstr_hab_%s > 0', species_name);
+		end if;
 	end loop;
 	
 	
@@ -580,7 +598,8 @@ begin
 			(case 
 			 when bp.cabd_id is not null then cast(bp.cabd_id as varchar)
 			 else cast(bp.modelled_id as varchar)
-			 end) = tt.barrier_id;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table);
+			 end) = tt.barrier_id
+        where (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);
 			 
 		SELECT EXISTS (
 			SELECT 1

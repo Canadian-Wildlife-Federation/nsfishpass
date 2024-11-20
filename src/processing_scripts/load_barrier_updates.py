@@ -214,6 +214,7 @@ def processUpdates(connection):
     """
     with connection.cursor() as cursor:
         cursor.execute(query)
+    connection.commit()
     
     initializeQuery = f"""
         WITH cte AS (
@@ -228,6 +229,7 @@ def processUpdates(connection):
     """
     with connection.cursor() as cursor:
         cursor.execute(initializeQuery)
+    connection.commit()
 
     newDeleteQuery = f"""
         -- new points

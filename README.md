@@ -438,7 +438,7 @@ compute_accessibility.py -c config.ini [watershedid]
 
 Computes a true/false value for habitat for each species for each stream segment.
 
-Habitat models are currently just based on accessibility - any stream segments that are 'ACCESSIBLE' or 'POTENTIALLY ACCESSIBLE' have been classified as habitat. These models can be refined when there are additional habitat parameters or supplementary habitat data available for the species of interest.
+Habitat models are currently just based on accessibility - any stream segments that are 'CONNECTED NATURALLY ACCESSIBLE WATERBODIES' or 'DISCONNECTED NATURALLY ACCESSIBLE WATERBODIES' have been classified as habitat. These models can be refined when there are additional habitat parameters or supplementary habitat data available for the species of interest.
 
 **Script**
 

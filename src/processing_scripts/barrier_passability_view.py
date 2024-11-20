@@ -107,9 +107,7 @@ def build_views(conn):
     query = f"""
         CREATE VIEW {dbTargetSchema}.barrier_passability_view AS 
         SELECT 
-            b.id,
-            b.cabd_id,
-            b.modelled_id,
+            COALESCE (b.cabd_id, b.modelled_id) as barrier_id,
             b.update_id,
             b.original_point,
             b.snapped_point,

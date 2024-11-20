@@ -595,10 +595,7 @@ begin
 		tt.supporting_links
 		from %I.barrier_passability_view bp
 		right join %I.%I tt on 
-			(case 
-			 when bp.cabd_id is not null then cast(bp.cabd_id as varchar)
-			 else cast(bp.modelled_id as varchar)
-			 end) = tt.barrier_id
+			cast(bp.barrier_id as varchar) = tt.barrier_id
         where (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);
 			 
 		SELECT EXISTS (

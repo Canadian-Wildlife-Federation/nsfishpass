@@ -102,7 +102,7 @@ def main():
         specCodes = [substring.strip() for substring in species.split(',')]
 
         query = f""" 
-            DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view; 
+            DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view CASCADE; 
             DROP VIEW IF EXISTS {dbTargetSchema}.natural_barriers_vw; 
         """
         with conn.cursor() as cursor:

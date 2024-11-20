@@ -594,7 +594,7 @@ begin
 		tt.notes,
 		tt.supporting_links
 		from %I.barrier_passability_view bp
-		right join %I.%I tt on 
+		full outer join %I.%I tt on 
 			cast(bp.barrier_id as varchar) = tt.barrier_id
         where (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);
 			 

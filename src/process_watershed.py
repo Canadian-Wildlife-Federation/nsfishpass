@@ -84,6 +84,5 @@ compute_barrier_dci.main()
 rank_barriers.main()
 barrier_passability_view.main()
 
-
 print ("Processing Complete: " + workingWatershedId)
 print("Runtime: " + str((datetime.now() - startTime)))

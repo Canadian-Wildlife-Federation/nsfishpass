@@ -10,11 +10,13 @@ import psycopg2 as pg2
 # ogr = "C:\\Program Files\\GDAL\\ogr2ogr.exe"
 ogr = "C:\\Program Files\\QGIS 3.22.1\\bin\\ogr2ogr.exe"
 
+
 dbHost = "cabd-postgres-prod.postgres.database.azure.com"
 dbPort = "5432"
 dbName = "nsfishpass"
 dbUser = input(f"""Enter username to access {dbName}:\n""")
 dbPassword = getpass.getpass(f"""Enter password to access {dbName}:\n""")
+
 
 watershed = sys.argv[1] # avon, halfway, st_croix, or msa
 species_code = sys.argv[2] # as or ae
@@ -37,6 +39,7 @@ elif watershed == 'msa':
 elif watershed == 'cheticamp':
     watershed_name = watershed
     wcrp = 'cheticamp'
+
 else:
     print('INVALID WATERSHED NAME')
     sys.exit()
@@ -49,7 +52,9 @@ conn = pg2.connect(database=dbName,
 
 
 query = f"""
+
 DROP TABLE IF EXISTS {wcrp}.ranked_barriers_{species_code}_{watershed};
+
 
 WITH barrier_passability_{species_code} 
 AS (
@@ -59,6 +64,7 @@ AS (
 		(
 			SELECT id 
 			FROM {wcrp}.fish_species 
+
 			WHERE code = '{species_code}'
 		)
 )
@@ -96,6 +102,7 @@ SELECT b.id
     ,b.w_total_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_total_upstr_hab_{species_code}
 	,bp.passability_status INTO {wcrp}.ranked_barriers_{species_code}_{watershed}
 FROM {wcrp}.barriers b
+
 JOIN barrier_passability_{species_code} bp
 	ON bp.barrier_id = b.id
 WHERE b.secondary_wshed_name = '{watershed_name}'
@@ -143,6 +150,7 @@ DECLARE
 	continue_loop BOOLEAN := TRUE;
 	i INT := 1;
 	grp_offset INT := (SELECT COUNT(*)*10 FROM {wcrp}.ranked_barriers_{species_code}_{watershed});
+
 BEGIN
 	WHILE continue_loop LOOP
 		
@@ -161,6 +169,7 @@ BEGIN
 					,AVG(w_func_upstr_hab_{species_code}) OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as average
 					,ROW_NUMBER() OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as row_num
 				from {wcrp}.ranked_barriers_{species_code}_{watershed}
+
 				where group_id < grp_offset
 				order by group_id, barrier_cnt_upstr_{species_code} DESC
 			),
@@ -191,6 +200,7 @@ BEGIN
 			set group_id = new_grps.new_group_id
 			from new_grps
 			where {wcrp}.ranked_barriers_{species_code}_{watershed}.id = new_grps.id
+
 			AND new_grps.new_group_id > grp_offset;
 
 		END IF;
@@ -201,6 +211,7 @@ select id, mainstem_id, group_id, barrier_cnt_upstr_{species_code}, func_upstr_h
 	,AVG(w_func_upstr_hab_{species_code}) OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as average
 	,ROW_NUMBER() OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as row_num
 from {wcrp}.ranked_barriers_{species_code}_{watershed}
+
 order by group_id, barrier_cnt_upstr_{species_code} DESC;
 
 
@@ -249,10 +260,12 @@ update {wcrp}.ranked_barriers_{species_code}_{watershed} SET w_avg_gain_per_barr
 
 ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} ADD downstr_group_ids varchar[];
 
+
 WITH downstr_barriers AS (
 	SELECT rb.id, rb.group_id
 		,UNNEST(barriers_downstr_{species_code}) AS barriers_downstr_{species_code}
 	FROM {wcrp}.ranked_barriers_{species_code}_{watershed} rb
+
 ),
 downstr_group AS (
 	SELECT db_.id, db_.group_id as current_group, db_.barriers_downstr_{species_code}
@@ -267,6 +280,7 @@ dg_arrays AS (
 	FROM downstr_group dg
 	GROUP BY dg.id
 )
+
 UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed}
 SET downstr_group_ids = dg_arrays.downstr_group_ids
 FROM dg_arrays
@@ -302,6 +316,7 @@ ranks AS (
 		,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as ranks
 		,FIRST_VALUE(barrier_cnt_downstr_{species_code}) OVER (PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as tier
 	FROM sorted
+
 	ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
 )
 UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed} 
@@ -336,6 +351,7 @@ WHERE {wcrp}.ranked_barriers_{species_code}_{watershed}.id = densify.id;
 
 -- Composite Rank of potential and immediate gain with upstream habitat cutoff
 ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} 
+
 ADD rank_combined numeric;
 
 WITH ranks AS (
@@ -364,17 +380,20 @@ WITH ranks AS (
 	FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
 )
 UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed}
+
 SET tier_combined = case
 			when r.rank_combined <= 10 then 'A'
 			when r.rank_combined <= 20 then 'B'
 			when r.rank_combined <= 30 then 'C'
 			else 'D'
 		end
+
 FROM ranks r
 WHERE {wcrp}.ranked_barriers_{species_code}_{watershed}.id = r.id;
 
 ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed}
 DROP COLUMN stream_id_up;
+
 
 """
 

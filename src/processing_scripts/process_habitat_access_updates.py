@@ -592,6 +592,9 @@ def simplifyHabitatAccess(codes, conn):
 
 def main():
 
+    if iniSection == 'cheticamp':
+        return
+
     with appconfig.connectdb() as conn:
 
         global specCodes

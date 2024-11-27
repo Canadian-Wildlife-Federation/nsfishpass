@@ -469,8 +469,8 @@ def main():
 
         result = tableExists(conn)
         
-        # if result:
-        #     matchArchive(conn)
+        if result and iniSection != 'cmm':
+            matchArchive(conn)
         
         print("  processing updates")
         processUpdates(conn)

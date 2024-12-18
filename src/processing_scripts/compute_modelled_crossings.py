@@ -346,6 +346,7 @@ def loadToBarriers(connection):
 
         
         INSERT INTO {dbTargetSchema}.{dbBarrierTable}(
+            id,
             modelled_id, snapped_point,
             type,
             stream_name, strahler_order, stream_id, 
@@ -354,6 +355,7 @@ def loadToBarriers(connection):
             crossing_subtype
         )
         SELECT 
+            modelled_id,
             modelled_id, geometry,
             'stream_crossing',
             stream_name, strahler_order, stream_id, 

@@ -490,6 +490,7 @@ declare
 	tt_struct_list_status_cols text = '';
 	tt_partial_pass_cols text = '';
     upstr_hab_condition text = '';
+    sec_wshed_condition text = '';
 	species_name text;
 	v_table_name text;
 	join_table text;
@@ -501,6 +502,7 @@ begin
 	if p_wcrp = 'cmm' then
 		v_table_name = 'combined_tracking_table_crossings_st_croix_vw';
 		join_table = 'combined_tracking_table_st_croix';
+        sec_wshed_condition = 'bp.secondary_wshed_name = ''St. Croix R.'' AND';
 	else
 		v_table_name = 'combined_tracking_table_crossings_' || p_wcrp || '_vw';
 		join_table = 'combined_tracking_table_' || p_wcrp;
@@ -596,7 +598,7 @@ begin
 		from %I.barrier_passability_view bp
 		full outer join %I.%I tt on 
 			cast(bp.barrier_id as varchar) = tt.barrier_id
-        where (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);
+        where %s (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);
 			 
 		SELECT EXISTS (
 			SELECT 1

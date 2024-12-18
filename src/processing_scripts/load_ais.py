@@ -76,7 +76,7 @@ def main():
                 CROSS JOIN LATERAL
                 (
                     WITH RECURSIVE upstream(id, geometry) AS (
-                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = ais.stream_id
+                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = CAST(ais.stream_id AS uuid)
                         UNION ALL
                         SELECT n.id, n.geometry
                         FROM {iniSection}.{streamTable} n, upstream w
@@ -113,7 +113,7 @@ def main():
                 CROSS JOIN LATERAL
                 (
                     WITH RECURSIVE downstream(id, geometry) AS (
-                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = ais.stream_id
+                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = CAST(ais.stream_id AS uuid)
                         UNION ALL
                         SELECT n.id, n.geometry
                         FROM {iniSection}.{streamTable} n, downstream w

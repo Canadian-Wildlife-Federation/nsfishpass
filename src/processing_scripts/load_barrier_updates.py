@@ -110,8 +110,8 @@ def loadBarrierUpdates(connection):
         AS SELECT * FROM {dbTargetSchema}.{dbTargetTable};
         ALTER TABLE  {dbTargetSchema}.{dbTargetTable}_archive OWNER TO cwf_analyst;
 
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS update_id;
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
+        --ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS update_id;
+        --ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey_v1;
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey_v1 PRIMARY KEY (update_id);
 
@@ -235,6 +235,8 @@ def processUpdates(connection):
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
             update_id,
+            modelled_id,
+            id,
             original_point, type, owner, 
             passability_status_notes,
             stream_name, date_examined,
@@ -243,6 +245,8 @@ def processUpdates(connection):
             )
         SELECT 
             update_id, 
+            barrier_id,
+            barrier_id,
             ST_Transform(geometry, 2961), barrier_type, ownership, 
             notes,
             stream_name, date_examined,
@@ -395,20 +399,24 @@ def matchArchive(connection):
             SELECT
             a.update_id,
             nn.update_id as archive_id,
-            nn.dist
+            nn.dist,
+            nn.barrier_id
             FROM {dbTargetSchema}.{dbTargetTable} a
             CROSS JOIN LATERAL
             (SELECT
             update_id,
+            barrier_id,
             ST_Distance(a.geometry, b.geometry) as dist
             FROM {dbTargetSchema}.{dbTargetTable}_archive b
+            WHERE a.update_id = b.update_id
             ORDER BY a.geometry <-> b.geometry
             LIMIT 1) as nn
             WHERE nn.dist < 10
         )
 
         UPDATE {dbTargetSchema}.{dbTargetTable} a
-            SET update_id = m.archive_id::uuid
+            SET update_id = m.archive_id::uuid,
+            barrier_id = m.barrier_id::uuid
             FROM matched m
             WHERE m.update_id = a.update_id;
     """
@@ -469,7 +477,7 @@ def main():
 
         result = tableExists(conn)
         
-        if result and iniSection != 'cmm':
+        if result:# and iniSection != 'cmm':
             matchArchive(conn)
         
         print("  processing updates")

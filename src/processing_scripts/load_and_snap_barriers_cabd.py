@@ -251,6 +251,7 @@ def main():
         for feature in feature_data:
             output_feature = []
             output_feature.append(feature["properties"]["cabd_id"])
+            output_feature.append(feature["properties"]["cabd_id"])
             output_feature.append(feature["geometry"]["coordinates"][0])
             output_feature.append(feature["geometry"]["coordinates"][1])
             output_feature.append(feature["properties"]["dam_name_en"])
@@ -262,6 +263,7 @@ def main():
 
         insertquery = f"""
             INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
+                id,
                 cabd_id, 
                 original_point,
                 name,
@@ -269,7 +271,7 @@ def main():
                 dam_use,
                 passability_status,
                 type)
-            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s, %s, %s, UPPER(%s), 'dam');
+            VALUES (%s, %s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s, %s, %s, UPPER(%s), 'dam');
         """
         with conn.cursor() as cursor:
             for feature in output_data:
@@ -287,6 +289,7 @@ def main():
         for feature in feature_data:
             output_feature = []
             output_feature.append(feature["properties"]["cabd_id"])
+            output_feature.append(feature["properties"]["cabd_id"])
             output_feature.append(feature["geometry"]["coordinates"][0])
             output_feature.append(feature["geometry"]["coordinates"][1])
             output_feature.append(feature["properties"]["fall_name_en"])
@@ -297,13 +300,14 @@ def main():
 
         insertquery = f"""
             INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
+                id,
                 cabd_id, 
                 original_point,
                 name,
                 fall_height_m,
                 passability_status,
                 type)
-            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s), 'waterfall');
+            VALUES (%s, %s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s), 'waterfall');
         """
         with conn.cursor() as cursor:
             for feature in output_data:
@@ -313,13 +317,14 @@ def main():
         # insert into waterfalls table 
         insertquery = f"""
             INSERT INTO {dbTargetSchema}.{dbWaterfallTable} (
+                id,
                 cabd_id, 
                 original_point,
                 name,
                 fall_height_m,
                 passability_status
             )
-            VALUES (%s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s));
+            VALUES (%s, %s, ST_Transform(ST_GeomFromText('POINT(%s %s)',4617),{appconfig.dataSrid}), %s,%s, UPPER(%s));
         """
         with conn.cursor() as cursor:
             for feature in output_data:

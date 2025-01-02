@@ -51,7 +51,8 @@ trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 
 def tableExists(connection):
     """

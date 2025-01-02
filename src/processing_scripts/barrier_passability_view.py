@@ -203,12 +203,14 @@ def build_views(conn):
         cursor.execute(query)
     conn.commit()
 
-    query = f"""
-        select join_tracking_table_crossings_vw(%s, %s);
-    """
-    with conn.cursor() as cursor:
-        cursor.execute(query, (iniSection, specCodes))
-    conn.commit()
+
+    if iniSection == 'cmm':  # change this line if other watersheds get a tracking table
+        query = f"""
+            select join_tracking_table_crossings_vw(%s, %s);
+        """
+        with conn.cursor() as cursor:
+            cursor.execute(query, (iniSection, specCodes))
+        conn.commit()
 
 
 

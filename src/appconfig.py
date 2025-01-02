@@ -64,15 +64,19 @@ streamTableDischargeField = "discharge"
 streamTableChannelConfinementField = "channel_confinement"
 fishSpeciesTable = config['DATABASE']['fish_species_table']
 
+demDir = config[iniSection]['dem_directory']
+
 dataSrid = config['DATABASE']['working_srid']  
 
 dbIdField = "id"
 dbGeomField = "geometry"
 dbWatershedIdField = "watershed_id"
 
-watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
-tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
+watershedTable = config[iniSection]['watershed_table']
+tidalZones = config[iniSection]['tidal_zones']
 fish_parameters = config['DATABASE']['fish_parameters']
+secondaryWatershedTable = config[iniSection]['secondary_watershed_table']
+
 
 # WCRP specific configuration parameters
 dbOutputSchema = config[iniSection]['output_schema']

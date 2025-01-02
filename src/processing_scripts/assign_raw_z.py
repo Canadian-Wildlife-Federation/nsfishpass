@@ -45,7 +45,8 @@ else:
     workingWatershedId = tuple(workingWatershedId)
 
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['3dgeometry_field']
-demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
+# demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
+demDir = appconfig.demDir
 
 demfiles = []
 

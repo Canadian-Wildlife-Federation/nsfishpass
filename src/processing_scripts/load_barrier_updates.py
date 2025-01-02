@@ -42,8 +42,10 @@ dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
-watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+# watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
+watershedTable = appconfig.watershedTable
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 joinDistance = appconfig.config['CROSSINGS']['join_distance']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 specCodes = appconfig.config[iniSection]['species']

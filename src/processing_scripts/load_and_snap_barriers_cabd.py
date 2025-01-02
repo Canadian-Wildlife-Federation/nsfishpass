@@ -90,7 +90,8 @@ dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 dbWaterfallTable = appconfig.config['BARRIER_PROCESSING']['waterfalls_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 species = appconfig.config[iniSection]['species']
 
 def main():

@@ -524,7 +524,8 @@ name = database name
 
 data_schema = name of main schema for holding raw stream data    
 stream_table = names of streams table    
-fish_parameters = name of fish species table    
+fish_parameters = location of csv file containing data for species of interest (data typically includes gradient etc.)
+fish_species_table = name of fish species table    
 working_srid = the srid of the stream data. These scripts use the function st_length to compute stream length so the raw data should be in a meters based projection (or reprojected before used). 
 
 [CABD_DATABASE]  
@@ -535,8 +536,6 @@ snap_distance = distance (in working srid units) for snapping point features #to
 raw_data = spatial file containing raw road, trail, and stream data  
 road_table = road table name  
 trail_table = trail table name  
-watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
-watershed_table = name of the layer containing watershed boundaries
   
 [PROCESSING]  
 stream_table = stream table name 
@@ -545,20 +544,39 @@ stream_table = stream table name
 watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
 nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data    
+fish_observation_data = zip file containing fish observation data (or None if such files does not exist)
 habitat_access_updates = spatial file containing updates to habitat or accessibility      
-watershed_table = table containing watershed boundaries
+watershed_table = table name containing watershed boundaries
+barrier_updates = table name containing barrier updates
+
+watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
+secondary_watershed_table = table containing the secondary watershed boundaries (or None if it does not exist)
+tidal_zone_data = path to file containing data for tidal zones (or None)
+tidal_zones = table name for tidal zones (or None)
+
+dem_directory = path to directory containing dems for watershed
+
+species = list of species of interest for the watershed
 
 [WATERSHEDID 2] -> there will be one section for each watershed with a unique section name  
 watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
 nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data    
-habitat_access_updates = spatial file containing updates to habitat or accessibility    
-watershed_table = table containing watershed boundaries
+fish_observation_data = zip file containing fish observation data (or None if such files does not exist)
+habitat_access_updates = spatial file containing updates to habitat or accessibility      
+watershed_table = table name containing watershed boundaries
+barrier_updates = table name containing barrier updates
+
+watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
+secondary_watershed_table = table containing the secondary watershed boundaries (or None if it does not exist)
+tidal_zone_data = path to file containing data for tidal zones (or None)
+tidal_zones = table name for tidal zones (or None)
+
+dem_directory = path to directory containing dems for watershed
+
+species = list of species of interest for the watershed
   
-[ELEVATION_PROCESSING]  
-dem_directory = directory containing dem   
+[ELEVATION_PROCESSING]   
 3dgeometry_field = field name (in streams table) for geometry that stores raw elevation data  
 smoothedgeometry_field = field name (in streams table)  for geometry that stores smoothed elevation data  
   
@@ -579,6 +597,7 @@ barrier_updates = spatial file containing updates to barriers
   
 [CROSSINGS]  
 modelled_crossings_table = table for storing modelled crossings    
+crossings_table = table for storing all crossings
 join_distance = distance (in working srid units) for joining assessment data with modelled crossings
 
 
@@ -586,3 +605,4 @@ join_distance = distance (in working srid units) for joining assessment data wit
 stats_table = name of the table to be created in the [DATABASE].data_schema schema which will contain watershed statistics
 
 watershed_data_schemas = the list of processing schemas to include in the stats table; the schemas must exist and data must be fully processed
+watersheds = list of watershed ids

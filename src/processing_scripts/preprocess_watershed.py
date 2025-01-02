@@ -34,8 +34,11 @@ else:
     workingWatershedId = tuple(workingWatershedId)
 
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
-watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+# watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+
+watershedTable = appconfig.watershedTable
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 
 publicSchema = "public"
 aoi = "chyf_aoi"

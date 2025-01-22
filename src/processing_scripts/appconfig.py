@@ -41,7 +41,7 @@ args = parser.parse_args()
 if (args.c):
     configfile = args.c
 
-   
+iniSection = args.args[0]  
 
 config = configparser.ConfigParser()
 config.read(configfile)
@@ -68,8 +68,9 @@ dataSrid = config['DATABASE']['working_srid']
 dbIdField = "id"
 dbGeomField = "geometry"
 dbWatershedIdField = "watershed_id"
-watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
-tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
+# watershedTable = config['CREATE_LOAD_SCRIPT']['watershed_table']
+# tidalZones = config['CREATE_LOAD_SCRIPT']['tidal_zones']
+tidalZones = config[iniSection]['tidal_zones']
 
 class Accessibility(enum.Enum):
     ACCESSIBLE = 'CONNECTED NATURALLY ACCESSIBLE WATERBODIES'

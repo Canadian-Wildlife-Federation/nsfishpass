@@ -48,6 +48,7 @@ from processing_scripts import remove_isolated_flowpaths
 from processing_scripts import load_ais
 from processing_scripts import barrier_passability_view
 from processing_scripts import rank_barriers
+from processing_scripts import watershed_summary_stats
 
 
 iniSection = appconfig.args.args[0]
@@ -83,6 +84,7 @@ load_ais.main()
 compute_barrier_dci.main()
 rank_barriers.main()
 barrier_passability_view.main()
+watershed_summary_stats.main()
 
 print ("Processing Complete: " + workingWatershedId)
 print("Runtime: " + str((datetime.now() - startTime)))

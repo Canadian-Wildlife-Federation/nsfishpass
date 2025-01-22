@@ -46,8 +46,8 @@ def build_views(conn):
 
 
     query = f""" 
-        DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view CASCADE; 
-        DROP VIEW IF EXISTS {dbTargetSchema}.natural_barriers_vw;
+        DROP VIEW IF EXISTS {dbTargetSchema}_wcrp.barrier_passability_view CASCADE; 
+        DROP VIEW IF EXISTS {dbTargetSchema}_wcrp.natural_barriers_vw;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
@@ -121,11 +121,11 @@ def build_views(conn):
     nat_colString = ','.join(nat_cols)
 
     query = f"""
-        CREATE VIEW {dbTargetSchema}.barrier_passability_view AS 
+        CREATE VIEW {dbTargetSchema}_wcrp.barrier_passability_view AS 
         SELECT 
             COALESCE (b.cabd_id, b.modelled_id) as barrier_id,
             b.update_id,
-            b.original_point,
+            --b.original_point,
             b.snapped_point,
             b.name,
             b.type,
@@ -166,6 +166,9 @@ def build_views(conn):
         FROM {dbTargetSchema}.{dbBarrierTable} b
         {joinString}
         WHERE {conditionString};
+
+        ALTER TABLE {dbTargetSchema}_wcrp.barrier_passability_view OWNER TO cwf_analyst;
+        GRANT SELECT ON TABLE {dbTargetSchema}_wcrp.barrier_passability_view TO cwf_user;
     """
 
     # print(query)
@@ -174,7 +177,7 @@ def build_views(conn):
     conn.commit()
 
     query = f"""
-        CREATE VIEW {dbTargetSchema}.natural_barriers_vw AS
+        CREATE VIEW {dbTargetSchema}_wcrp.natural_barriers_vw AS
         with gradients as (
             select b.id, b.type, b.point
             from {dbTargetSchema}.break_points b
@@ -196,6 +199,9 @@ def build_views(conn):
         FROM nat_barriers b
         {nat_joinstring}
         WHERE {conditionString};
+
+        ALTER TABLE {dbTargetSchema}_wcrp.natural_barriers_vw OWNER TO cwf_analyst;
+        GRANT SELECT ON TABLE {dbTargetSchema}_wcrp.natural_barriers_vw TO cwf_user;
     """
 
     # print(query)
@@ -204,13 +210,13 @@ def build_views(conn):
     conn.commit()
 
 
-    if iniSection == 'cmm':  # change this line if other watersheds get a tracking table
-        query = f"""
-            select join_tracking_table_crossings_vw(%s, %s);
-        """
-        with conn.cursor() as cursor:
-            cursor.execute(query, (iniSection, specCodes))
-        conn.commit()
+    # if iniSection == 'cmm':  # change this line if other watersheds get a tracking table
+    query = f"""
+        select join_tracking_table_crossings_vw(%s, %s);
+    """
+    with conn.cursor() as cursor:
+        cursor.execute(query, (iniSection, specCodes))
+    conn.commit()
 
 
 

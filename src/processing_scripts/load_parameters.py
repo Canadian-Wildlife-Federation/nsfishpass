@@ -33,6 +33,8 @@ sourceTable = appconfig.dataSchema + ".fish_species_raw"
 dataFile = appconfig.fish_parameters
 fishSpeciesTable = appconfig.fishSpeciesTable
 
+specCodes = appconfig.getSpecies()
+
 def main():
     with appconfig.connectdb() as conn:
 

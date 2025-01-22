@@ -256,7 +256,8 @@ def processUpdates(connection):
             cmm_pt_exists
         FROM {dbTargetSchema}.{dbTargetTable}
         WHERE update_type = 'new feature'
-        AND update_status = 'ready';
+        AND update_status = 'ready'
+        AND barrier_id IS NOT NULL;
 
         -- barrier ids
         UPDATE {dbTargetSchema}.{dbTargetTable}

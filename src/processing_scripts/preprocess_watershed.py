@@ -144,9 +144,15 @@ def main():
             FROM {appconfig.dataSchema}.{secondaryWatershedTable} t3 
             WHERE ST_Intersects(s.geometry, t3.geometry)
             """
-            with conn.cursor() as cursor:
-                cursor.execute(query)
-            conn.commit()
+        else:
+            query = f"""
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} s
+            SET 
+                sec_name = '{iniSection}'
+            """
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
         
     print(f"""Initializing processing for watershed {workingWatershedId} complete.""")
 

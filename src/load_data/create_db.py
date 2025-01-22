@@ -28,12 +28,14 @@ trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 railTable = appconfig.config['CREATE_LOAD_SCRIPT']['rail_table']
 
 query = f"""
-    drop schema if exists {appconfig.dataSchema} cascade;
+    --drop schema if exists {appconfig.dataSchema} cascade;
+    --drop schema if exists {appconfig.dataSchema}_wcrp cascade;
 
     CREATE EXTENSION IF NOT EXISTS postgis;
     CREATE EXTENSION IF NOT EXISTS postgres_fdw;
     
     create schema {appconfig.dataSchema};
+    create schema {appconfig.dataSchema}_wcrp;
     
     create table {appconfig.dataSchema}.{appconfig.streamTable} (
         id uuid NOT NULL,
@@ -142,6 +144,8 @@ query = f"""
     ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
     ALTER TABLE {appconfig.dataSchema}.{trailTable} OWNER TO cwf_analyst;
     ALTER TABLE {appconfig.dataSchema}.{railTable} OWNER TO cwf_analyst;
+    
+    ALTER SCHEMA {appconfig.dataSchema}_wcrp OWNER TO cwf_analyst;
 
     
 """
@@ -414,7 +418,7 @@ begin
 	end loop;
 		
 	execute format(
-		'CREATE TABLE IF NOT EXISTS %I.%I
+		'CREATE TABLE IF NOT EXISTS %I_wcrp.%I
 		(
 			internal_name varchar,
 			barrier_id varchar PRIMARY KEY,
@@ -462,11 +466,11 @@ begin
     ) INTO table_exists;
 	
 	IF table_exists THEN 
-		execute format('ALTER TABLE IF EXISTS %I.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
-    	execute format('REVOKE ALL ON TABLE %I.%I FROM cwf_user;', p_wcrp, v_table_name);
-		execute format('GRANT SELECT ON TABLE %I.%I TO cwf_user;', p_wcrp, v_table_name);
-		execute format('GRANT ALL ON TABLE %I.%I TO cwf_analyst;', p_wcrp, v_table_name);
-		execute format('GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE %I.%I TO fieldingm;', p_wcrp, v_table_name);
+		execute format('ALTER TABLE IF EXISTS %I_wcrp.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
+    	execute format('REVOKE ALL ON TABLE %I_wcrp.%I FROM cwf_user;', p_wcrp, v_table_name);
+		execute format('GRANT SELECT ON TABLE %I_wcrp.%I TO cwf_user;', p_wcrp, v_table_name);
+		execute format('GRANT ALL ON TABLE %I_wcrp.%I TO cwf_analyst;', p_wcrp, v_table_name);
+		execute format('GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE %I_wcrp.%I TO fieldingm;', p_wcrp, v_table_name);
 	END IF;  
 	
 end
@@ -540,7 +544,7 @@ begin
 	
 	
 	execute format(
-		'create or replace view %I.%I as
+		'create or replace view %I_wcrp.%I as
 		select 
 		tt.barrier_id,
 		bp.original_point,
@@ -595,7 +599,7 @@ begin
 		tt.reason,
 		tt.notes,
 		tt.supporting_links
-		from %I.barrier_passability_view bp
+		from %I_wcrp.barrier_passability_view bp
 		full outer join %I.%I tt on 
 			cast(bp.barrier_id as varchar) = tt.barrier_id
         where %s (%s) or tt.barrier_id is not null;', p_wcrp, v_table_name, bp_species_cols, tt_struct_list_status_cols, tt_partial_pass_cols, p_wcrp, p_wcrp, join_table, upstr_hab_condition);

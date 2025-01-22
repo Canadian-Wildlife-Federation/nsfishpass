@@ -103,18 +103,19 @@ def main():
         specCodes = [substring.strip() for substring in species.split(',')]
 
         query = f""" 
-            DROP VIEW IF EXISTS {dbTargetSchema}.barrier_passability_view CASCADE; 
-            DROP VIEW IF EXISTS {dbTargetSchema}.natural_barriers_vw; 
+            DROP VIEW IF EXISTS {dbTargetSchema}_wcrp.barrier_passability_view CASCADE; 
+            DROP VIEW IF EXISTS {dbTargetSchema}_wcrp.natural_barriers_vw; 
         """
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
 
         # create fish species table
-        # TO DO: Only pull species of interest for the wcrp (listed in config file)
-        # Also should probably move this to load_parameters.py or preprocess_watershed.py
+        # TO DO:
+        # should probably move this to load_parameters.py or preprocess_watershed.py
+        specCodes_placeholder = ', '.join(['%s'] * len(specCodes)) 
         query = f"""
-            DROP TABLE IF EXISTS {dbTargetSchema}.fish_species;
+            DROP TABLE IF EXISTS {dbTargetSchema}.fish_species CASCADE;
             
             CREATE TABLE IF NOT EXISTS {dbTargetSchema}.fish_species (
                 id uuid not null default gen_random_uuid()
@@ -126,13 +127,14 @@ def main():
             );
 
             INSERT INTO {dbTargetSchema}.fish_species (code, common_name, mi_kmaw_name)
-            SELECT code, name, mi_kmaw_name FROM {appconfig.dataSchema}.{fishSpeciesTable};
+            SELECT code, name, mi_kmaw_name FROM {appconfig.dataSchema}.{fishSpeciesTable}
+            WHERE code IN ({specCodes_placeholder});
 
             ALTER TABLE {dbTargetSchema}.fish_species OWNER TO cwf_analyst;
         """
 
         with conn.cursor() as cursor:
-            cursor.execute(query)
+            cursor.execute(query, specCodes)
 
         # creates barriers table with attributes from CABD and crossings table
         query = f"""

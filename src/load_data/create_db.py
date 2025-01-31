@@ -612,11 +612,11 @@ begin
 		) INTO table_exists;
 			
 		IF table_exists THEN 
-			execute format('ALTER TABLE IF EXISTS %I.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
-			execute format('REVOKE ALL ON TABLE %I.%I FROM cwf_user;', p_wcrp, v_table_name);
-			execute format('GRANT ALL ON TABLE %I.%I TO cwf_analyst;', p_wcrp, v_table_name);
-			execute format('GRANT SELECT ON TABLE %I.%I TO cwf_user;', p_wcrp, v_table_name);
-			execute format('GRANT SELECT ON TABLE %I.%I TO fieldingm;', p_wcrp, v_table_name);
+			execute format('ALTER TABLE IF EXISTS %I_wcrp.%I OWNER to cwf_analyst;', p_wcrp, v_table_name);
+			execute format('REVOKE ALL ON TABLE %I_wcrp.%I FROM cwf_user;', p_wcrp, v_table_name);
+			execute format('GRANT ALL ON TABLE %I_wcrp.%I TO cwf_analyst;', p_wcrp, v_table_name);
+			execute format('GRANT SELECT ON TABLE %I_wcrp.%I TO cwf_user;', p_wcrp, v_table_name);
+			execute format('GRANT SELECT ON TABLE %I_wcrp.%I TO fieldingm;', p_wcrp, v_table_name);
 		END IF;
 end
 $$

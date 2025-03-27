@@ -63,6 +63,7 @@ streamTable = config['DATABASE']['stream_table']
 streamTableDischargeField = "discharge"
 streamTableChannelConfinementField = "channel_confinement"
 fishSpeciesTable = config['DATABASE']['fish_species_table']
+barrierAssessmentsFile = config[iniSection]['barrier_assessments']
 
 demDir = config[iniSection]['dem_directory']
 

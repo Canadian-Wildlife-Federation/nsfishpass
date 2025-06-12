@@ -592,7 +592,7 @@ def simplifyHabitatAccess(codes, conn):
 
 def main():
 
-    if iniSection == 'cheticamp':
+    if iniSection in ['cheticamp', 'stewiacke']:
         return
 
     with appconfig.connectdb() as conn:

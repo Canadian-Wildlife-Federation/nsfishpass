@@ -23,68 +23,78 @@
 import appconfig
 from datetime import datetime
 
-startTime = datetime.now()
+from processing_scripts import (
+    load_parameters,
+    preprocess_watershed,
+    load_and_snap_barriers_cabd,
+    load_and_snap_fishobservation,
+    load_habitat_access_updates,
+    process_habitat_access_updates,
+    compute_modelled_crossings,
+    load_barrier_updates,
+    compute_mainstems,
+    assign_raw_z,
+    smooth_z,
+    compute_vertex_gradient,
+    compute_segment_gradient,
+    break_streams_at_barriers,
+    compute_updown_barriers_fish,
+    compute_accessibility,
+    assign_habitat,
+    compute_barriers_upstream_values,
+    compute_barrier_dci,
+    remove_isolated_flowpaths,
+    load_ais,
+    barrier_passability_view,
+    rank_barriers,
+    watershed_summary_stats,
+    process_assessments,
+)
 
-from processing_scripts import load_parameters
-from processing_scripts import preprocess_watershed
-from processing_scripts import load_and_snap_barriers_cabd
-from processing_scripts import load_and_snap_fishobservation
-from processing_scripts import load_habitat_access_updates
-from processing_scripts import process_habitat_access_updates
-from processing_scripts import compute_modelled_crossings
-from processing_scripts import load_barrier_updates
-from processing_scripts import compute_mainstems
-from processing_scripts import assign_raw_z
-from processing_scripts import smooth_z
-from processing_scripts import compute_vertex_gradient
-from processing_scripts import compute_segment_gradient
-from processing_scripts import break_streams_at_barriers
-from processing_scripts import compute_updown_barriers_fish
-from processing_scripts import compute_accessibility
-from processing_scripts import assign_habitat
-from processing_scripts import compute_barriers_upstream_values
-from processing_scripts import compute_barrier_dci
-from processing_scripts import remove_isolated_flowpaths
-from processing_scripts import load_ais
-from processing_scripts import barrier_passability_view
-from processing_scripts import rank_barriers
-from processing_scripts import watershed_summary_stats
 
+def run_model(watershed_id):
+    '''
+    Runs the entire model workflow.
+    '''
+    print (f"Processing: {watershed_id}")
 
-iniSection = appconfig.args.args[0]
+    load_parameters.main()
+    preprocess_watershed.main()
+    remove_isolated_flowpaths.main()
+    load_and_snap_barriers_cabd.main()
+    # load_and_snap_fishobservation.main()
+    compute_modelled_crossings.main()
+    load_barrier_updates.main()
 
-workingWatershedId = appconfig.config[iniSection]['watershed_id']
+    # process_assessments.main()
 
-print ("Processing: " + workingWatershedId)
+    compute_mainstems.main()
+    assign_raw_z.main()
+    smooth_z.main()
+    compute_vertex_gradient.main()
+    load_habitat_access_updates.main()
+    break_streams_at_barriers.main()
+    print ("Recalculating elevations on broken streams: " + workingWatershedId)
+    #re-assign elevations to broken streams
+    assign_raw_z.main()
+    smooth_z.main()
+    compute_segment_gradient.main()
+    compute_updown_barriers_fish.main()
+    compute_accessibility.main()
+    assign_habitat.main()
+    process_habitat_access_updates.main()
+    compute_barriers_upstream_values.main()
+    load_ais.main()
+    compute_barrier_dci.main()
+    rank_barriers.main()
+    barrier_passability_view.main()
+    watershed_summary_stats.main()
 
-load_parameters.main()
-preprocess_watershed.main()
-remove_isolated_flowpaths.main()
-load_and_snap_barriers_cabd.main()
-# load_and_snap_fishobservation.main()
-compute_modelled_crossings.main()
-load_barrier_updates.main()
-compute_mainstems.main()
-assign_raw_z.main()
-smooth_z.main()
-compute_vertex_gradient.main()
-load_habitat_access_updates.main()
-break_streams_at_barriers.main()
-print ("Recalculating elevations on broken streams: " + workingWatershedId)
-#re-assign elevations to broken streams
-assign_raw_z.main()
-smooth_z.main()
-compute_segment_gradient.main()
-compute_updown_barriers_fish.main()
-compute_accessibility.main()
-assign_habitat.main()
-process_habitat_access_updates.main()
-compute_barriers_upstream_values.main()
-load_ais.main()
-compute_barrier_dci.main()
-rank_barriers.main()
-barrier_passability_view.main()
-watershed_summary_stats.main()
+    print (f"Processing Complete: {watershed_id}")
 
-print ("Processing Complete: " + workingWatershedId)
-print("Runtime: " + str((datetime.now() - startTime)))
+if __name__ == "__main__":
+    startTime = datetime.now()
+    iniSection = appconfig.args.args[0]
+    workingWatershedId = appconfig.config[iniSection]['watershed_id']
+    run_model(workingWatershedId)
+    print("Runtime: " + str((datetime.now() - startTime)))

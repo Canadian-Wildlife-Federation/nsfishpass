@@ -68,7 +68,7 @@ def loadBarrierUpdates(connection):
 
     query = f"""
         CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{dbTargetTable} (
-            update_id uuid NOT NULL DEFAULT gen_random_uuid(),
+            update_id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
             barrier_id uuid,
             update_source varchar,
             update_date date,
@@ -87,10 +87,8 @@ def loadBarrierUpdates(connection):
             cmm_pt_exists boolean,
             update_status varchar,
             geometry geometry(Point,2961),
-            snapped_point geometry(Point,2961),
+            snapped_point geometry(Point,2961)
             
-
-            PRIMARY KEY (update_id)
         );
 
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} OWNER TO cwf_analyst;
@@ -114,8 +112,8 @@ def loadBarrierUpdates(connection):
 
         --ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS update_id;
         --ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey_v1;
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey_v1 PRIMARY KEY (update_id);
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey;
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey PRIMARY KEY (update_id);
 
     """
     

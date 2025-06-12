@@ -24,6 +24,7 @@ import appconfig
 import networkx as nx
 import shapely.wkb
 from tqdm import tqdm
+import psycopg2.extras as pg2e
 
 import sys
 
@@ -87,36 +88,103 @@ def disconnectedIslands(conn):
                      {'fid': feat[0]})
                 ]
             )
-    
-    print("    finding connected subgraphs")
-    connected_components = list(G.subgraph(c) for c in sorted(nx.connected_components(G), key=len, reverse=True))
 
     query = f"""
-        ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable}_copy
-            ADD COLUMN IF NOT EXISTS networkGrp int DEFAULT 0
+        DROP TABLE IF EXISTS network_groups;
+        CREATE TABLE network_groups
+        (
+            id uuid,
+            ng int
+        );
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
         conn.commit()
 
+    print("    finding connected subgraphs")
+    connected_components = list(G.subgraph(c) for c in sorted(nx.connected_components(G), key=len, reverse=True))
+    numGroups = len(connected_components)
+
     print("    writing results")
-    newData = []
-    updateQuery = f"""
-        UPDATE {dbTargetSchema}.{dbTargetStreamTable}_copy
-        SET networkGrp = %s
-        WHERE id = %s;
+
+    insertQuery =f"""
+        INSERT INTO network_groups (id, ng)
+        VALUES %s;
     """
-    for i, graph in enumerate(tqdm(connected_components)):
-        # ignore streams on largest network group (networkGrp = 0)
-        # since most will be on this group
-        # and default value is already 0
-        # this speeds up the loop to only label streams off main network
-        if i == 0:
-            continue
-        for edge in graph.edges(data=True):
-            with conn.cursor() as cursor:
-                cursor.execute(updateQuery, (i, edge[2].get('fid')))
-            conn.commit()
+
+    with conn.cursor() as cursor:
+        for i, graph in enumerate(tqdm(connected_components, miniters=1000)):
+            # ignore streams on largest network group (networkGrp = 0)
+            # since most will be on this group
+            # and default value is already 0
+            # this speeds up the loop to only find streams off main network
+            if i == 0:
+                continue
+            data = []
+            for edge in graph.edges(data=True):
+                    data.append(tuple([edge[2].get('fid'), i]))
+                    # cursor.execute(updateQuery, (i, edge[2].get('fid')))
+                    # pg2e.execute_values(cursor, insertQuery, data, template='(%s, %s::uuid)')
+                    conn.commit()
+            pg2e.execute_values(cursor, insertQuery, data, template='(%s::uuid, %s)')
+            # conn.commit()
+
+    query = f"""
+        ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable}_copy
+            ADD COLUMN IF NOT EXISTS networkGrp int DEFAULT 0;
+
+        UPDATE {dbTargetSchema}.{dbTargetStreamTable}_copy AS s
+        SET networkGrp = ng.ng
+        FROM (SELECT id, ng FROM network_groups) AS ng
+        WHERE s.id = ng.id;
+    """
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+        conn.commit()
+    
+
+    # REMOVE IF NO ISSUES WHEN RUN ON CMM, MARGAREE, ETC
+    # print("    finding connected subgraphs")
+    # connected_components = list(G.subgraph(c) for c in sorted(nx.connected_components(G), key=len, reverse=True))
+
+    # query = f"""
+    #     ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable}_copy
+    #         ADD COLUMN IF NOT EXISTS networkGrp int DEFAULT 0
+    # """
+    # with conn.cursor() as cursor:
+    #     cursor.execute(query)
+    #     conn.commit()
+
+    # print("    writing results")
+    # newData = []
+    # updateQuery = f"""
+    #     UPDATE {dbTargetSchema}.{dbTargetStreamTable}_copy
+    #     SET networkGrp = %s
+    #     WHERE id = %s;
+    # """
+    # updates = []
+    # conn.autocommit = False
+    # with conn.cursor() as cursor:
+    #     for i, graph in enumerate(tqdm(connected_components)):
+    #         # ignore streams on largest network group (networkGrp = 0)
+    #         # since most will be on this group
+    #         # and default value is already 0
+    #         # this speeds up the loop to only label streams off main network
+    #         if i == 0:
+    #             continue
+    #         for edge in graph.edges(data=True):
+    #             updates.append((i, edge[2].get('fid')))
+    #             # cursor.execute(updateQuery, (i, edge[2].get('fid')))
+    #             if len(updates) >= 1000:
+    #                 cursor.executemany(updateQuery, updates)
+    #                 updates.clear()
+    #     if updates:
+    #         cursor.executemany(updateQuery, updates)
+    # conn.commit()
+    # conn.clost()
+    # with conn.cursor() as cursor:
+    #     cursor.executemany(updateQuery, updates)
+    # conn.commit()
                 
     
 

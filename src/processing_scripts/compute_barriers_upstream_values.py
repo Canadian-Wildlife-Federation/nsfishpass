@@ -136,6 +136,8 @@ class Edge:
 
     def __iter__(self):
         return iter([self.fid, self.length, self.downbarriers, self.downpassability, self.habitat])
+    
+
 
 def createNetwork(connection):
     # Takes longest to run, could look to improve in future

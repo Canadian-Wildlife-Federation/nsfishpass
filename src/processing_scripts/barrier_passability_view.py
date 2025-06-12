@@ -210,7 +210,11 @@ def build_views(conn):
     conn.commit()
 
 
-    # if iniSection == 'cmm':  # change this line if other watersheds get a tracking table
+    # to add a new tracking table, in postgresql run this:
+    # SELECT public.create_tracking_table(
+    # 	'<wcrp>',
+    # 	ARRAY['<species_1>', '<species_2>', etc.]
+    # )
     query = f"""
         select join_tracking_table_crossings_vw(%s, %s);
     """

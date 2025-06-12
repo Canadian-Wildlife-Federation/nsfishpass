@@ -26,13 +26,13 @@ from psycopg2.extras import RealDictCursor
 streamTable = appconfig.config['DATABASE']['stream_table']
 roadTable = appconfig.config['CREATE_LOAD_SCRIPT']['road_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
-watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
-tidalZones = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zones']
+watershedTable = appconfig.watershedTable
+secondaryWatershedTable = appconfig.secondaryWatershedTable
+tidalZones = appconfig.tidalZones
 
 file = appconfig.config['CREATE_LOAD_SCRIPT']['raw_data']
-watershedfile = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_data']
-tidalZoneFile = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zone_data']
+watershedfile = appconfig.watershedfile
+tidalZoneFile = appconfig.watershedTable
 temptable = appconfig.dataSchema + ".temp"
 
 sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")

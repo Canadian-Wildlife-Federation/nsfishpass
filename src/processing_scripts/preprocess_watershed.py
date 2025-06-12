@@ -130,7 +130,7 @@ def main():
             ALTER TABLE  {dbTargetSchema}.{dbTargetStreamTable} OWNER TO cwf_analyst;
        
         """
-        #print(query)
+        # print(query)
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

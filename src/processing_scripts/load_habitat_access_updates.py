@@ -34,7 +34,7 @@ snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
 def main():
 
-    if iniSection == 'cheticamp':
+    if iniSection in ['cheticamp', 'stewiacke']:
         return
 
     with appconfig.connectdb() as conn:

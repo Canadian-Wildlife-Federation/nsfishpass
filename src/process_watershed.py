@@ -69,14 +69,17 @@ def run_model(watershed_id):
     # process_assessments.main()
 
     compute_mainstems.main()
-    assign_raw_z.main()
+
+    dem_files = assign_raw_z.indexDem()
+
+    assign_raw_z.main(dem_files)
     smooth_z.main()
     compute_vertex_gradient.main()
     load_habitat_access_updates.main()
     break_streams_at_barriers.main()
-    print ("Recalculating elevations on broken streams: " + workingWatershedId)
+    print ("Recalculating elevations on broken streams: " + watershed_id)
     #re-assign elevations to broken streams
-    assign_raw_z.main()
+    assign_raw_z.main(dem_files)
     smooth_z.main()
     compute_segment_gradient.main()
     compute_updown_barriers_fish.main()

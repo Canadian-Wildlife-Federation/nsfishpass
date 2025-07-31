@@ -46,6 +46,11 @@ We recommend editing a single config.ini file with the configuration parameters 
 Data Processing takes part in three steps: load raw data, process each watershed, and compute summary statistics. If raw data has already been loaded for a watershed, you can run the analysis portions only using src/run_analysis.py.
 
 
+## 0 - Installing required libraries
+Before running any of the scripts, make sure you have the required libraries installed.
+* pip install -r requirements.txt
+
+
 ## 1 - Loading Raw Data
 
 The first step is to populate the database with the required data. These load scripts are specific to the data provided for Nova Scotia. Different source data will require modifications to these scripts.

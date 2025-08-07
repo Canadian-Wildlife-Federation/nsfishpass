@@ -135,8 +135,6 @@ def main():
 
             DROP TABLE {sourceTable};
             """
-        
-        # print(query)
 
         with conn.cursor() as cursor:
             cursor.execute(query)

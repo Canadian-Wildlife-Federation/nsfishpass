@@ -96,6 +96,8 @@ def disconnectedIslands(conn):
             id uuid,
             ng int
         );
+        ALTER TABLE IF EXISTS network_groups
+        OWNER TO cwf_analyst;
     """
     with conn.cursor() as cursor:
         cursor.execute(query)

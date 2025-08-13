@@ -1,0 +1,23 @@
+#this script is to be run in the QGIS python console
+#see README for further instruction
+import re
+
+layer = iface.activeLayer()  # Make sure your polygon layer is selected
+links = []
+
+for feature in layer.getFeatures():
+    description = feature['description']
+    if description:
+        # Find the first <a href = "..."> link (note the spaces around =)
+        match = re.search(r'<a\s+href\s*=\s*["\']([^"\']+)["\']', description, re.IGNORECASE)
+        if match:
+            url = match.group(1)
+            links.append(url)
+
+# Write to text file
+output_path = 'C:/Users/TMillaKoch/repos/DEM/dem_links.txt'  # Change this path
+with open(output_path, 'w') as f:
+    for link in links:
+        f.write(f"{link},\n")
+
+print(f"Extracted {len(links)} first links to {output_path}")

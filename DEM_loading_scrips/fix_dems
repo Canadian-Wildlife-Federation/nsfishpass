@@ -1,0 +1,65 @@
+import os
+import subprocess
+import shutil
+import pandas as pd
+from pathlib import Path
+
+# if filename contains _c:
+#     find all filenames that contain value before _c
+#     merge those rasters together
+#     save results as filename with value before _c in a new folder
+
+data_dir = Path(r"C:\Users\AndrewP\Canadian Wildlife Federation\Conservation Science General - Documents (1)\Freshwater\Fish Passage\Nova Scotia\MSA\model_data\elevation\raw_data")
+new_dir = Path(r"C:\Users\AndrewP\Canadian Wildlife Federation\Conservation Science General - Documents (1)\Freshwater\Fish Passage\Nova Scotia\MSA\model_data\elevation\raw_data\merged")
+gdal_dir = Path(r"C:\Program Files\QGIS 3.22.1")
+osgeo_dir = Path(r"C:\Program Files\QGIS 3.22.1\OSGeo4W.bat")
+
+delimiter = "_c"
+
+d = []
+for (root,dirs,files) in os.walk(data_dir):
+    for file in files:
+        filepath = os.path.join(root,file)
+        filename = Path(filepath).stem
+        filebase = filename.split(delimiter)[0]
+        d.append(
+            {
+                'filepath': filepath,
+                'filename': filename,
+                'filebase': filebase
+            }
+        )
+
+df = pd.DataFrame(d)
+
+df2 = df.groupby('filebase',as_index=False).agg({'filepath':lambda x : list(x),'filename':'first'})
+df2['length'] = df2['filepath'].str.len()
+
+for index, row in df2.iterrows():
+
+    if row['length'] == 1:
+        print("Copying", row['filename'])
+        src = str(row['filepath'][0])
+        dest = str(new_dir)+"\\"+row['filebase']+".tif"
+
+        shutil.copy(src, dest)
+
+    else:
+        files = row['filepath']
+        fileString =' '.join('"{}"'.format(f) for f in files)
+        
+        name = row['filename']
+        dest = str(new_dir) + "\\" + name + ".tif"
+        
+        my_call = [osgeo_dir,
+        'gdal_merge',
+        '-o',
+        dest,
+        fileString]
+
+        my_call = f"""{osgeo_dir} gdal_merge -o "{dest}" {fileString} -n -32767 -a_nodata -32767"""
+
+        print("\n", my_call)
+
+        # call it
+        p = subprocess.call(my_call)

@@ -20,6 +20,9 @@
 # This script creates the database tables that follow the structure
 # in the gdb file.
 #
+# This script runs once when the entire FishPass model is first generated.
+# Do not run this script when creating new WCRPs in an existing database.
+#
  
 import appconfig
 

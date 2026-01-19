@@ -1,3 +1,36 @@
+#----------------------------------------------------------------------------------
+#
+# Copyright 2022 by Canadian Wildlife Federation, Alberta Environment and Parks
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#----------------------------------------------------------------------------------
+
+###
+# This script computes the dci value for each barrier.
+# 
+# The Dendritic Connectivity Index (DCI) value for the barrier for the species. 
+# This is a measure of the effect this barrier would have on connectivity for that species, if it were made fully passable or removed.
+#
+# This is calculated as the difference between the current watershed DCI and the watershed DCI if the barrier was removed or made fully passable
+#
+# A high DCI value for a barrier indicates a greater improvement to connectivity than a low DCI value.
+#
+# See: https://www.notion.so/cwf-spatial/Connectivity-Stats-14641376668e80f1bd72f1f701888a5f?source=copy_link#14641376668e80588a17fd2b333a7dcb
+#
+###
+
+
 import appconfig
 import psycopg2.extras
 import numpy as np
@@ -39,6 +72,13 @@ class BarrierData:
         print("dci:", self.dci)
 
 def getSpeciesConnectivity(conn, species):
+    """
+    Generates a dictionary of per-species dci for entire stream network
+    
+    :param conn: db conneciton
+    :param species: list of species
+    :return: dictionary of dci for each species over the entire stream network
+    """
 
     dci_base = {}
 
@@ -56,21 +96,38 @@ def getSpeciesConnectivity(conn, species):
     return dci_base
 
 def getBarrierDCI(barrier, barrierData, streamData, species, speciesDCI, totalHabitat):
+    """
+    Docstring for getBarrierDCI
+    
+    :param barrier: one barrier in the barrierData list
+    :param barrierData: List of BarrierData objects
+    :param streamData: List of StreamData objects
+    :param species: List of species codes
+    :param speciesDCI: Dict of dci per species for the entire stream network
+    :param totalHabitat: Dict of length of habitat per species over entire stream network
+    :return: dci for barrier
+    """
 
     newStreamArray = []
     dci_sum = {}
 
+    # TODO: This loop is not a significant bottleneck, nor is the DCI used that much by the biologists
+    # However, this could probably be improved using dynamic programming. 
+    # The DCI values for every stream segment in the entire network should not need to be recalculated every time we want to get the dci for one barrier
+    # Rather, we should keep a table of each stream segment's dci and populate it initially with the dci of the network
+    # Then, when we want to find the dci for a barrier, we should find only the stream segments with that barrier id as a downbarrier and only recalculate those
+    # Then sum the dci's for the stream network using a combination of the previously calculated dcis and the new dcis
     for stream in streamData:
         streamDCI = {}
         downbarriers = stream.downbarriers
         downpassability = stream.downpassability
-        newStreamData = StreamData(stream.fid, stream.length, downbarriers, stream.habitat)
+        newStreamData = StreamData(stream.fid, stream.length, downbarriers, stream.habitat)         # This will store the stream info if barrier were removed
 
         for fish in species:
             downbarriers[fish] = stream.downbarriers[fish]
             passabilities = []
             
-            for b in downbarriers[fish]:
+            for b in downbarriers[fish]:                # passability values for downstream barriers aside from current barrier
                 if str(b) == str(barrier.bid):
                     pass
                 else:
@@ -80,13 +137,13 @@ def getBarrierDCI(barrier, barrierData, streamData, species, speciesDCI, totalHa
             newStreamData.downpassability[fish] = downpassability[fish]
 
             if newStreamData.habitat[fish]:
-                streamDCI[fish] = ((newStreamData.length / totalHabitat[fish]) * newStreamData.downpassability[fish]) * 100
+                streamDCI[fish] = ((newStreamData.length / totalHabitat[fish]) * newStreamData.downpassability[fish]) * 100  # DCI calculation for stream segment
             else:
                 streamDCI[fish] = 0
             
             newStreamData.dci[fish] = streamDCI[fish]
             
-        newStreamArray.append(newStreamData)
+        newStreamArray.append(newStreamData) # list of dci for each stream segment 
     
     for fish in species:
         dci_sum[fish] = sum(newStream.dci[fish] for newStream in newStreamArray)
@@ -110,6 +167,17 @@ def getHabitatLength(conn, species):
     return totalLength
 
 def generateStreamData(conn, species):
+    """
+    Generates an array of StreamData objects over entire stream network. Each StreamData object is a stream segment with the following attributes:
+    fid             - id of stream segment
+    length          - length of stream segment
+    downbarriers    - a dictionary containing arrays of downstream barrier ids per species from that stream segment
+    habitat         - dict containing each species and a boolean indicating whether the stream segment is habitat for that species
+    
+    :param conn: db conenciton
+    :param species: array of species
+    :return: Array of StreamData objects
+    """
 
     streamArray = []
 
@@ -151,6 +219,16 @@ def generateStreamData(conn, species):
     return streamArray
 
 def generateBarrierData(conn, species):
+    """
+    Generates a list of BarrierData objects. Each BarrierData object is a barrier with the following attributes:
+    bid                 - id of the barrier
+    passabilitystatus   - dictionary of passability for each species
+    dci                 - dendritic connectivity index (not assigned in this function)
+    
+    :param conn: db connection
+    :param species: list of species
+    :return: List of BarrierData objects with id and passabilitystatus defined
+    """
 
     barrierDict = {}
 

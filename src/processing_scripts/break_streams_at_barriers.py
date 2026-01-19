@@ -333,7 +333,7 @@ def breakstreams (conn):
             mainstem_id, a.geometry
         FROM {dbTargetSchema}.newstreamlines a;
 
-        UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
+        --UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
         DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} WHERE ST_IsEmpty(geometry);
 
         DROP INDEX IF EXISTS {dbTargetSchema}."smooth_geom_idx";

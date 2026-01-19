@@ -25,6 +25,7 @@
 
 import appconfig
 import subprocess
+import sys
 
 # dataFile = appconfig.config['DATABASE']['fish_parameters']
 sourceTable = appconfig.dataSchema + ".fish_species_raw"
@@ -137,7 +138,7 @@ def main():
             """
         
         # print(query)
-
+        # sys.exit()
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

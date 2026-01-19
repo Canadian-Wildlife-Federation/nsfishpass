@@ -35,7 +35,7 @@ All configuration is setup in the config.ini file. Before running any scripts yo
 
 All of the scripts allow for a custom configuration file to be specified by providing it as the -c argument to the program. If not supplied the default config.ini file will be used. For example:
 
-> prompt> create_db.py -c custom_config.ini
+> prompt> create_db.py -c custom_config.ini   # This will create a new database and should only be run if you are setting up the entire FishPass model for the first time.
 
 The config.ini and appconfig.py files are included in the /src and /src/processing_scripts folders by default. If you want to run a script from another folder (e.g., src/load_data), you will need to make sure the config.ini and appconfig.py files are in that folder as well.   
 

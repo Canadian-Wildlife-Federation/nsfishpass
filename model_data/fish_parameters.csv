@@ -1,0 +1,3 @@
+code,name,mi_kmaw_name,accessibility_gradient,fall_height_threshold,spawn_gradient_min,spawn_gradient_max,rear_gradient_min,rear_gradient_max,spawn_discharge_min,spawn_discharge_max,rear_discharge_min,rear_discharge_max,spawn_channel_confinement_min,spawn_channel_confinement_max,rear_channel_confinement_min,rear_channel_confinement_max
+as,Atlantic Salmon,Plamu,0.3,5,0,0.03,0,0.03,0,100,0,100,0,100,0,100
+ae,American Eel,Kataq,1,0,0,100,0,100,0,100,0,100,0,100,0,100

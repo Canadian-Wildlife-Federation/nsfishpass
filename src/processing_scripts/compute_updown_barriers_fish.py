@@ -36,6 +36,7 @@ dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 dbPassabiltyTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
+species = appconfig.config[iniSection]['species']
 
 edges = []
 nodes = dict()
@@ -190,7 +191,7 @@ def createNetwork(connection, code):
         {dbTargetSchema}.{dbTargetStreamTable} b
         where st_dwithin(b.geometry, a.point, 0.01)
             and st_dwithin(st_startpoint(b.geometry), a.point, 0.01)
-            and a.type = 'gradient_barrier'
+            and (a.type = 'gradient_barrier' or a.type = 'waterfall')
             and f.code = '{code}'
             and p.passability_status != '1'
         union 
@@ -201,7 +202,7 @@ def createNetwork(connection, code):
         {dbTargetSchema}.{dbTargetStreamTable} b
         where st_dwithin(b.geometry, a.point, 0.01)
             and st_dwithin(st_endpoint(b.geometry), a.point, 0.01)
-            and a.type = 'gradient_barrier'
+            and (a.type = 'gradient_barrier' or a.type = 'waterfall')
             and f.code = '{code}'
             and p.passability_status != '1'
     """
@@ -346,20 +347,23 @@ def main():
 
         conn.autocommit = False
 
-        query = f"""
-        SELECT code, name
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
-        """
+        # query = f"""
+        # SELECT code, name
+        # FROM {dataSchema}.{appconfig.fishSpeciesTable};
+        # """
 
         global specCodes
+        global species
 
-        with conn.cursor() as cursor:
-            cursor.execute(query)
-            specCodes = cursor.fetchall()
+        specCodes = [substring.strip() for substring in species.split(',')]
+
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        #     specCodes = cursor.fetchall()
 
         for species in specCodes:
-            code = species[0]
-            name = species[1]
+            code = species
+            # name = species[1]
         
             
 
@@ -367,7 +371,7 @@ def main():
             nodes.clear()
             
             print("Computing Upstream/Downstream Barriers")
-            print("  processing barriers for", name)
+            print("  processing barriers for", code)
             print("  creating output column")
 
             query = f"""

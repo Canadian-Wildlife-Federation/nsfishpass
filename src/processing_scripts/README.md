@@ -1,72 +1,5 @@
-# cwf-ns
-Store scripts related to habitat modelling in Nova Scotia.
 
-# Overview
-
-This project contains a set of scripts to create and maintain an aquatic connectivity / fish passage database for Nova Scotia to:
-* Track known barriers to fish passage (e.g., dams and stream crossings)
-* Model potential barriers to fish passage (stream gradient, road/rail/trail stream crossings)
-* Model passability/accessibility of streams based on barriers and species swimming ability
-* Model streams with potential for spawning and rearing activity (for select species)
-* Prioritize assessment and remediation of barriers based on modelled accessibility and habitat potential
-
-# Copyright
-
-Copyright 2023 by Canadian Wildlife Federation
-
-# License
-
-Apache License, Version 2.0
-http://www.apache.org/licenses/LICENSE-2.0
-
-# Software Requirements
-* Python (tested with version 3.9.5)
-    * Modules: shapely, psycopg2, tifffile, requests
-    
-    
-* GDAL/OGR (comes installed with QGIS or can install standalone)
-
-* PostgreSQL/PostGIS database
-
-
-
-# Configuration
-All configuration is setup in the config.ini file. Before running any scripts you should ensure the information in this file is correct. 
-
-All of the scripts allow for a custom configuration file to be specified by providing it as the -c argument to the program. If not supplied the default config.ini file will be used. For example:
-
-> prompt> create_db.py -c custom_config.ini   # This will create a new database and should only be run if you are setting up the entire FishPass model for the first time.
-
-The config.ini and appconfig.py files are included in the /src and /src/processing_scripts folders by default. If you want to run a script from another folder (e.g., src/load_data), you will need to make sure the config.ini and appconfig.py files are in that folder as well.   
-
-We recommend editing a single config.ini file with the configuration parameters you need, then copying this file to the other folders if you want to run individual scripts. 
-
-# Processing
-
-Data Processing takes part in three steps: load raw data, process each watershed, and compute summary statistics. If raw data has already been loaded for a watershed, you can run the analysis portions only using src/run_analysis.py.
-
-
-## 0 - Installing required libraries
-Before running any of the scripts, make sure you have the required libraries installed.
-* pip install -r requirements.txt
-
-
-## 1 - Loading Raw Data
-
-The first step is to populate the database with the required data. These load scripts are specific to the data provided for Nova Scotia. Different source data will require modifications to these scripts.
-
-**Scripts**
-* load_data/create_db.py -> this script creates all the necessary database tables. A database must already exist for these tables to be created in. 
-  This will also drop existing tables if the model already has data in it. This should only be run on model initialization.
-* load_data/load_data.py -> this script uses OGR to load data for Nova Scotia road, trail, and stream networks from a gdb file into the PostgreSQL database.
-
-**Running the Scripts**  
-* create_db.py -c config.ini  
-* load_data.py -c config.ini
-
-You will be prompted to enter a username and password to access the nsfishpass database.
-
-## 2 - Watershed Processing
+# Watershed Processing (Running the model)
 
 Processing is completed by watershed id. Each watershed is processed into a separate schema in the database. The watershed configuration must be specified in the ini file and the configuration to be used provided to the script (see below).
 
@@ -95,57 +28,6 @@ Currently processing includes:
 * Rank barriers
 * Create views
 
-**Main Script**
-
-****All existing data in the output schema and tables will be deleted when you run this full script.**
-
-process_watershed.py -c config.ini [watershedid]
-
-The watershedid field must be specified as a section header in the config.ini file. The section must describe the watershed processing details. For example:
-
-[cmm]    
-#NS: cmm    
-watershed_id = ["01dd000","01de000","01df000"]    
-nhn_watershed_id = ["01dd000","01de000","01df000"]    
-output_schema = cmm    
-fish_observation_data = C:\\temp\\ns_model_testing\\fish_observations.gpkg     
-habitat_access_updates = C:\\temp\\ns_model_testing\\habitat_access_updates.gpkg      
-barrier_updates = C:\\temp\\ns_model_testing\\barrier_updates.gpkg          
-watershed_table = cmm_watersheds
-
-**Input Requirements**
-
-* Directory of tif images representing DEM files. All files should have the same projection and resolution. The scripts assume this data is in an equal length projection so the st_length2d(geometry) function returns the length in metres. This should be specified in the config file under [ELEVATION_PROCESSING] as the dem_directory variable.
-
-* A raw streams table with id (uuid), name (varchar), strahler order (integer), watershed_id (varchar), and geometry (linestring) fields. This should be loaded into the database with the correct format if you have run load_data.py.
-
-**Output**
-
-* A new schema with a streams table, barrier, modelled crossings and other output tables.  
-
-## 3 - Compute Summary Statistics
-
-Summary statistics can be computed across multiple watersheds. The watersheds to be processed are specified in config.ini, for example:
-
-watershed_data_schemas=ws01cd000,ws02cd000
-
-Summary statistics will also be calculated for each watershed and for each species
-
-**Main Script**
-
-compute_watershed_stats.py -c config.ini
-
-**Input Requirements**
-
-* This scripts reads fields from the processed watershed data in the various schemas.   
-
-**Output**
-
-* A new table raw_data.watershed_stats that contains various watershed statistics
-
-
- 
----
 #  Individual Processing Scripts
 
 These scripts are the individual processing scripts that are used for the watershed processing steps.
@@ -186,6 +68,30 @@ This script loads dam barriers from the CABD API where use_analysis = true.
 
 By default, the script uses the nhn_watershed_id from config.ini for the subject watershed(s) to retrieve features from the API. You can have multiple nhn_watershed_ids specified in the config file as long as they are formatted as a list, e.g., ["01dd000","01de000","01df000"].
 
+**Process**
+The Script first drops views created in barrier_passability_view.py since those views depend on tables created in this script.
+
+The fish species table is loaded into the wcrp schema.
+
+The barriers table is created which will hold dams and waterfalls pulled from the CABD along with modelled crossings which will be generated in a later script.
+
+The waterfalls table is created which will only hold waterfalls. In the future, this will be the only place for waterfalls and they will be separated out of barriers but waterfalls are also loaded into barriers since all the calculations work out with the barriers table.
+
+The passability table is created. This table stores the passability for each species for each barrier. This means that each barrier has a record in this table for each species which tracks the passability of that species for that barrier. For example, if there are two species of interest in the watershed, each barrier will have two records in the table.
+
+The CABD API is queried to get dam data which is loaded into the barriers table.
+
+The CABD API is queried to get waterfall data which is loaded into the barriers table and the waterfalls table.
+
+Barriers in the barriers table are snapped to the stream network.
+Waterfalls are snapped to the stream network in the waterfalls table.
+
+Secondary watershed values are defined. By default, this is the same as the wcrp primary watershed name. For CMM, there are 3 secondary watersheds necessitating this part of the script.
+
+Passability values are loaded into the passability table. In the CABD, passability is assigned with a string value 'BARRIER' or 'PASSABLE'. This is translated into 1 and 0 respectively. For waterfalls, the height thresholds are taken from the fish_species table and the passability is assigned by species based on these for each waterfall. 
+
+Passability column is dropped from the barriers table since the info is now in the barrier_passability table.
+
 **Script**
 
 load_and_snap_barriers_cabd.py -c config.ini [watershedid]
@@ -198,10 +104,15 @@ load_and_snap_barriers_cabd.py -c config.ini [watershedid]
 **Output**
 
 * A new barrier table populated with dam barriers from the CABD API
+* Fish species table with information on each species of interest
+* A waterfalls table populated with waterfalls from the CABD API
+* A barrier_passability table populated with the passability of each barrier for each species (one entry for each barrier-species pair)
 * The barrier table has two geometry fields - the raw field and a snapped field (the geometry snapped to the stream network). The maximum snapping distance is specified in the configuration file.
 
 ---
 #### 3 - Load and snap fish observation data
+
+NOT USED IN NSFISHPASS
 
 Loads fish observation or habitat data provided and snaps it to the stream network. This data can be used by later scripts to override accessibility or habitat calculations. For instance, you can mark a stream segment as accessible because fish have been observed there, even if the accessibility model would have marked that segment as inaccessible.
 
@@ -443,7 +354,7 @@ compute_accessibility.py -c config.ini [watershedid]
 
 Computes a true/false value for habitat for each species for each stream segment.
 
-Habitat models are currently just based on accessibility - any stream segments that are 'CONNECTED NATURALLY ACCESSIBLE WATERBODIES' or 'DISCONNECTED NATURALLY ACCESSIBLE WATERBODIES' have been classified as habitat. These models can be refined when there are additional habitat parameters or supplementary habitat data available for the species of interest.
+Habitat models are currently just based on accessibility - any stream segments that are 'ACCESSIBLE' or 'POTENTIALLY ACCESSIBLE' have been classified as habitat. These models can be refined when there are additional habitat parameters or supplementary habitat data available for the species of interest.
 
 **Script**
 
@@ -613,7 +524,8 @@ name = database name
 
 data_schema = name of main schema for holding raw stream data    
 stream_table = names of streams table    
-fish_parameters = name of fish species table    
+fish_parameters = location of csv file containing data for species of interest (data typically includes gradient etc.)
+fish_species_table = name of fish species table    
 working_srid = the srid of the stream data. These scripts use the function st_length to compute stream length so the raw data should be in a meters based projection (or reprojected before used). 
 
 [CABD_DATABASE]  
@@ -624,8 +536,6 @@ snap_distance = distance (in working srid units) for snapping point features #to
 raw_data = spatial file containing raw road, trail, and stream data  
 road_table = road table name  
 trail_table = trail table name  
-watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
-watershed_table = name of the layer containing watershed boundaries
   
 [PROCESSING]  
 stream_table = stream table name 
@@ -634,20 +544,39 @@ stream_table = stream table name
 watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
 nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data    
+fish_observation_data = zip file containing fish observation data (or None if such files does not exist)
 habitat_access_updates = spatial file containing updates to habitat or accessibility      
-watershed_table = table containing watershed boundaries
+watershed_table = table name containing watershed boundaries
+barrier_updates = table name containing barrier updates
+
+watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
+secondary_watershed_table = table containing the secondary watershed boundaries (or None if it does not exist)
+tidal_zone_data = path to file containing data for tidal zones (or None)
+tidal_zones = table name for tidal zones (or None)
+
+dem_directory = path to directory containing dems for watershed
+
+species = list of species of interest for the watershed
 
 [WATERSHEDID 2] -> there will be one section for each watershed with a unique section name  
 watershed_id = watershed id to process. if multiple watersheds should be combined/processed as a single watershed, this can be a list.    
 nhn_watershed_id = nhn watershed id(s) to process  
 output_schema = output schema name  
-fish_observation_data = zip file containing fish observation data    
-habitat_access_updates = spatial file containing updates to habitat or accessibility    
-watershed_table = table containing watershed boundaries
+fish_observation_data = zip file containing fish observation data (or None if such files does not exist)
+habitat_access_updates = spatial file containing updates to habitat or accessibility      
+watershed_table = table name containing watershed boundaries
+barrier_updates = table name containing barrier updates
+
+watershed_data = spatial file containing watershed boundaries. this can be the same as the raw_data file  
+secondary_watershed_table = table containing the secondary watershed boundaries (or None if it does not exist)
+tidal_zone_data = path to file containing data for tidal zones (or None)
+tidal_zones = table name for tidal zones (or None)
+
+dem_directory = path to directory containing dems for watershed
+
+species = list of species of interest for the watershed
   
-[ELEVATION_PROCESSING]  
-dem_directory = directory containing dem   
+[ELEVATION_PROCESSING]   
 3dgeometry_field = field name (in streams table) for geometry that stores raw elevation data  
 smoothedgeometry_field = field name (in streams table)  for geometry that stores smoothed elevation data  
   
@@ -668,6 +597,7 @@ barrier_updates = spatial file containing updates to barriers
   
 [CROSSINGS]  
 modelled_crossings_table = table for storing modelled crossings    
+crossings_table = table for storing all crossings
 join_distance = distance (in working srid units) for joining assessment data with modelled crossings
 
 
@@ -675,3 +605,4 @@ join_distance = distance (in working srid units) for joining assessment data wit
 stats_table = name of the table to be created in the [DATABASE].data_schema schema which will contain watershed statistics
 
 watershed_data_schemas = the list of processing schemas to include in the stats table; the schemas must exist and data must be fully processed
+watersheds = list of watershed ids

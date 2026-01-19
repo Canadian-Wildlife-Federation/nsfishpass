@@ -45,7 +45,8 @@ else:
     workingWatershedId = tuple(workingWatershedId)
 
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['3dgeometry_field']
-demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
+# demDir = appconfig.config['ELEVATION_PROCESSING']['dem_directory']
+demDir = appconfig.demDir
 
 demfiles = []
 
@@ -350,7 +351,7 @@ def findElevation(x, y):
     return appconfig.NODATA    
 
 #--- main program ---
-def main():
+def main(demfiles):
     
     with appconfig.connectdb() as conn:
         
@@ -358,7 +359,7 @@ def main():
         
         watershed_id = getWatershedIds(conn)
     
-        demfiles = indexDem()
+        # demfiles = indexDem()
         
         #process each dem file
         print("Computing Elevations")

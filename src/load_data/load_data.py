@@ -17,7 +17,8 @@
 #----------------------------------------------------------------------------------
 
 #
-# This script loads gdb files into postgis database, create by the create_db.py script
+# This script loads gpkg files into postgis database
+# If the db does not exist, create it using the create_db.py script
 #
 import subprocess
 import appconfig
@@ -26,13 +27,14 @@ from psycopg2.extras import RealDictCursor
 streamTable = appconfig.config['DATABASE']['stream_table']
 roadTable = appconfig.config['CREATE_LOAD_SCRIPT']['road_table']
 trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
-watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
-tidalZones = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zones']
+watershedTable = appconfig.watershedTable
+secondaryWatershedTable = appconfig.secondaryWatershedTable
+tidalZones = appconfig.tidalZones
 
+# location of gpkg files containing raw data to load
 file = appconfig.config['CREATE_LOAD_SCRIPT']['raw_data']
-watershedfile = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_data']
-tidalZoneFile = appconfig.config['CREATE_LOAD_SCRIPT']['tidal_zone_data']
+watershedfile = appconfig.watershedfile
+tidalZoneFile = appconfig.watershedTable
 temptable = appconfig.dataSchema + ".temp"
 
 sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
@@ -40,7 +42,7 @@ sheds = appconfig.config['HABITAT_STATS']['watersheds'].split(",")
 def loadWatersheds(conn):
 
     print("Loading watershed boundaries")
-    layer = "cmm_watersheds"
+    layer = watershedTable
     datatable = appconfig.dataSchema + "." + watershedTable
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
@@ -52,7 +54,7 @@ def loadWatersheds(conn):
     #     cursor.execute(query)
     # conn.commit()
 
-
+    # loads layers from gpkg files to the database
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
     subprocess.run(pycmd)
     
@@ -65,9 +67,18 @@ def loadWatersheds(conn):
     conn.commit()
 
 def loadSecondaryWatersheds(conn):
+    """
+    Nova Scotia divides its larger watersheds into secondary and tertiary watersheds.
+    Our WCRPs in Nova Scotia work on the secondary watershed scale.
+    This loads those secondary watersheds.
+    
+    :param conn: database connection
+    """
     print("Loading secondary watershed boundaries")
-    # layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix", "cmm_shore_direct_1", "cmm_shore_direct_2", "cmm_shore_direct_3"]
-    layers = ["cmm_halfway", "cmm_avon", "cmm_stcroix"]
+    layers = [secondaryWatershedTable]
+
+    if secondaryWatershedTable == 'None':
+        return
 
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{secondaryWatershedTable};
@@ -81,7 +92,7 @@ def loadSecondaryWatersheds(conn):
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
     for layer in layers:
-        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
+        pycmd = '"' + appconfig.ogr + '" -update -append -preserve_fid -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geom -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
         subprocess.run(pycmd)
 
     query = f"""
@@ -96,8 +107,17 @@ def loadSecondaryWatersheds(conn):
 
 
 def loadTidalZones(conn):
+    """
+    Nova Scotia secondary watersheds also have tidal zones defined which connect to the coastlines.
+    
+    :param conn: db connection
+    """
     print("Loading tidal zones")
-    layer = "tidal_zones"
+    layer = tidalZones
+
+    if tidalZones == 'None':
+        return 
+    
     datatable = appconfig.dataSchema + "." + tidalZones
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
@@ -130,7 +150,6 @@ def loadStreams(conn):
     aoiTable = publicSchema + "." + aoi
 
     aois = str(sheds)[1:-1].upper()
-
     query = f"""
     SELECT id::varchar FROM {aoiTable} WHERE short_name IN ({aois});
     """
@@ -138,12 +157,13 @@ def loadStreams(conn):
         cursor.execute(query)
         rows = cursor.fetchall()
 
-
+    # Puts aoiTuple in a bracketed string to be used in SQL where clauses
     if len(rows) == 1:
         aoiTuple = f"('{rows[0]['id']}')"
     else:
         aoiTuple = tuple([row['id'] for row in rows])
     
+    # Create stream tables within AOI boundaries
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{streamTable};
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{flowpathProperties};
@@ -165,6 +185,7 @@ def loadStreams(conn):
     ALTER TABLE {appconfig.dataSchema}.{streamTable} OWNER TO cwf_analyst;
     ALTER TABLE {appconfig.dataSchema}.{flowpathProperties} OWNER TO cwf_analyst;
     """
+    # print(query)
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
@@ -178,11 +199,17 @@ def loadStreams(conn):
     UPDATE {appconfig.dataSchema}.{streamTable} SET rivername1 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid1 IS NOT NULL AND rivernameid1 = a.name_id;
     UPDATE {appconfig.dataSchema}.{streamTable} SET rivername2 = a.name_en FROM {flowpathNamesTable} a WHERE rivernameid2 IS NOT NULL AND rivernameid2 = a.name_id;
     UPDATE {appconfig.dataSchema}.{streamTable} b SET strahler_order = a.strahler_order FROM {appconfig.dataSchema}.{flowpathProperties} a WHERE b.id = a.id;
-    UPDATE {appconfig.dataSchema}.{streamTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);
     """
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {appconfig.dataSchema}.{streamTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);'
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
 
 
 def loadRoads(conn):
@@ -199,9 +226,7 @@ def loadRoads(conn):
     query = f"""
     --CREATE INDEX {appconfig.dataSchema}_{roadTable}_geometry on {appconfig.dataSchema}.{roadTable} using gist(geometry);
 
-    ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN watershed_name varchar;
-
-    UPDATE {appconfig.dataSchema}.{roadTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);
+    ALTER TABLE {appconfig.dataSchema}.{roadTable} ADD COLUMN IF NOT EXISTS watershed_name varchar;
 
     ALTER TABLE {appconfig.dataSchema}.{roadTable} OWNER TO cwf_analyst;
     """
@@ -209,6 +234,14 @@ def loadRoads(conn):
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {appconfig.dataSchema}.{roadTable} b SET watershed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.geometry, a.geometry);'
+
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
 
 def main():
 

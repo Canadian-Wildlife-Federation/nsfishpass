@@ -36,6 +36,7 @@ dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
+species_codes = appconfig.config[iniSection]['species']
 
 edges = []
 nodes = dict()
@@ -135,13 +136,26 @@ class Edge:
 
     def __iter__(self):
         return iter([self.fid, self.length, self.downbarriers, self.downpassability, self.habitat])
+    
+
 
 def createNetwork(connection):
     # Takes longest to run, could look to improve in future
+
+    global specCodes
+    global species_codes
+
+    specCodes = [substring.strip() for substring in species_codes.split(',')]
+
+    if len(specCodes) == 1:
+        specCodes = f"('{specCodes[0]}')"
+    else:
+        specCodes = tuple(specCodes)
     
     query = f"""
         SELECT a.code
         FROM {appconfig.dataSchema}.{appconfig.fishSpeciesTable} a
+        WHERE code IN {specCodes};
     """
     
     barrierupcntmodel = ''
@@ -561,7 +575,6 @@ def writeResults(connection):
             WHERE a.stream_id = b.id AND
                   a.stream_id = {dbTargetSchema}.{dbBarrierTable}.stream_id_up;
 
-
             --total upstream habitat
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} DROP COLUMN IF EXISTS total_upstr_hab_spawn_{fish};
             ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN total_upstr_hab_spawn_{fish} double precision;
@@ -723,9 +736,19 @@ def writeResults(connection):
 
 def assignBarrierCounts(connection):
 
+    global specCodes
+
+    specCodes = [substring.strip() for substring in species_codes.split(',')]
+
+    if len(specCodes) == 1:
+        specCodes = f"('{specCodes[0]}')"
+    else:
+        specCodes = tuple(specCodes)
+
     query = f"""
         SELECT a.code
         FROM {appconfig.dataSchema}.{appconfig.fishSpeciesTable} a
+        WHERE code IN {specCodes};
     """
 
     with connection.cursor() as cursor:

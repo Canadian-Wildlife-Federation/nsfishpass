@@ -34,6 +34,9 @@ snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
 def main():
 
+    if iniSection in ['cheticamp', 'stewiacke']:
+        return
+
     with appconfig.connectdb() as conn:
 
         query = f"""DROP TABLE IF EXISTS {dbTargetSchema}.{datatable};"""

@@ -21,7 +21,19 @@
 # with road/trail network) and attributes that can be derived
 # from the stream network
 #
+
+"""
+* OUTPUT
+* Creates and loads
+modelled_crossings
+modelled_crossings_archive (if modelled_crossings exists)
+* Modifies
+barriers - all modelled crossings are added to the barriers table
+barrier_passability - passability for all crossings are added to the passability table
+
+"""
 import appconfig
+
 from appconfig import dataSchema
 
 iniSection = appconfig.args.args[0]
@@ -39,20 +51,14 @@ trailTable = appconfig.config['CREATE_LOAD_SCRIPT']['trail_table']
 dbBarrierTable = appconfig.config['BARRIER_PROCESSING']['barrier_table']
 dbPassabilityTable = appconfig.config['BARRIER_PROCESSING']['passability_table']
 snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
-
-# with appconfig.connectdb() as conn:
-
-#     query = f"""
-#     SELECT code
-#     FROM {dataSchema}.{appconfig.fishSpeciesTable};
-#     """
-
-#     with conn.cursor() as cursor:
-#         cursor.execute(query)
-#         specCodes = cursor.fetchall()
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 
 def tableExists(connection):
+    """
+    Returns whether the modelled crossings table exists in the database already
+    Necessary for creating the archive
+    """
 
     query = f"""
     SELECT EXISTS(SELECT 1 FROM information_schema.tables 
@@ -341,6 +347,7 @@ def loadToBarriers(connection):
 
         
         INSERT INTO {dbTargetSchema}.{dbBarrierTable}(
+            id,
             modelled_id, snapped_point,
             type,
             stream_name, strahler_order, stream_id, 
@@ -349,6 +356,7 @@ def loadToBarriers(connection):
             crossing_subtype
         )
         SELECT 
+            modelled_id,
             modelled_id, geometry,
             'stream_crossing',
             stream_name, strahler_order, stream_id, 
@@ -359,14 +367,24 @@ def loadToBarriers(connection):
 
         UPDATE {dbTargetSchema}.{dbBarrierTable} SET wshed_name = '{dbWatershedId}';
         
-        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
-
-        UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
+        SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');  
     """
 
     with connection.cursor() as cursor:
         cursor.execute(query)
     connection.commit()
+
+    if secondaryWatershedTable != 'None':
+        query = f'UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);'
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
+    else:
+        # defualt to wcrp name
+        query = f"UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = '{iniSection}'"
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
 
     query = f"""
         SELECT id 
@@ -442,41 +460,26 @@ def main():
 
         result = tableExists(conn)
 
-        if result:
+        print("  creating tables")
+        createTable(conn)
+        
+        print("  computing modelled crossings")
+        computeCrossings(conn)
 
-            print("  creating tables")
-            createTable(conn)
-            
-            print("  computing modelled crossings")
-            computeCrossings(conn)
+        if result:
 
             print("  matching to archived crossings")
             matchArchive(conn)
             
             conn.commit()
 
-            print("  calculating modelled crossing attributes")
-            computeAttributes(conn)
+        print("  calculating modelled crossing attributes")
+        computeAttributes(conn)
 
-            print("  loading to barriers table")
-            loadToBarriers(conn)
-            
-            conn.commit()
+        print("  loading to barriers table")
+        loadToBarriers(conn)
         
-        else:
-            print("  creating tables")
-            createTable(conn)
-            
-            print("  computing modelled crossings")
-            computeCrossings(conn)
-
-            print("  calculating modelled crossing attributes")
-            computeAttributes(conn)
-
-            print("  loading to barriers table")
-            loadToBarriers(conn)
-            
-            conn.commit()
+        conn.commit()
                 
     print("done")
 

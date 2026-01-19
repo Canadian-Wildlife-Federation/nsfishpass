@@ -23,6 +23,8 @@
 import appconfig
 from imagecodecs.imagecodecs import NONE
 
+import sys
+
 iniSection = appconfig.args.args[0]
 dataSchema = appconfig.config['DATABASE']['data_schema']
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
@@ -37,6 +39,7 @@ dbVertexTable = appconfig.config['GRADIENT_PROCESSING']['vertex_gradient_table']
 dbTargetGeom = appconfig.config['ELEVATION_PROCESSING']['smoothedgeometry_field']
 dbGradientBarrierTable = appconfig.config['BARRIER_PROCESSING']['gradient_barrier_table']
 dbHabAccessUpdates = "habitat_access_updates"
+specCodes = appconfig.config[iniSection]['species']
 
 # stream order segment weighting
 w1 = 0.25
@@ -64,9 +67,10 @@ def insertPassability(conn, passability_data):
         INSERT INTO {dbTargetSchema}.barrier_passability (
             barrier_id
             ,species_id
+            ,species_code
             ,passability_status
         )
-        VALUES(%s, %s, %s);
+        VALUES(%s, %s, %s, %s);
     """
 
     with conn.cursor() as cursor:
@@ -105,12 +109,10 @@ def breakstreams (conn):
             SELECT snapped_point, id, type
             FROM {dbTargetSchema}.{dbBarrierTable};
 
-        -- Need to figure out why adding in this query causes the accessibility model
-        -- to mark almost everything as accessible
         --habitat and accessibility updates
-        INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
-            SELECT snapped_point, id, update_type
-            FROM {dbTargetSchema}.{dbHabAccessUpdates};
+        -- INSERT INTO {dbTargetSchema}.{dbGradientBarrierTable} (point, id, type)
+        --    SELECT snapped_point, id, update_type
+        --    FROM {dbTargetSchema}.{dbHabAccessUpdates};
 
         ALTER TABLE  {dbTargetSchema}.{dbGradientBarrierTable} OWNER TO cwf_analyst;
     """
@@ -119,18 +121,6 @@ def breakstreams (conn):
     with conn.cursor() as cursor:
         cursor.execute(query)
     conn.commit()
-
-    # removeDuplicatesQuery = f"""
-    #     --delete duplicate points in a narrow tolerance
-    #     DELETE FROM {dbTargetSchema}.{dbGradientBarrierTable} b1
-    #     WHERE EXISTS (SELECT FROM {dbTargetSchema}.{dbGradientBarrierTable} b2
-    #         WHERE b1.id > b2.id
-    #         AND ST_DWithin(b1.point, b2.point, 0.1));
-    # """
-    # # print(removeDuplicatesQuery)
-    # with conn.cursor() as cursor:
-    #     cursor.execute(removeDuplicatesQuery)
-    # conn.commit()
         
     # break at gradient points
 
@@ -143,6 +133,7 @@ def breakstreams (conn):
     mingradient = -1
     
     with conn.cursor() as cursor:
+        # print(query)
         cursor.execute(query)
         features = cursor.fetchall()
         mingradient = features[0][0]
@@ -226,7 +217,7 @@ def breakstreams (conn):
         query = f"""
             SELECT id
             FROM {dbTargetSchema}.{dbGradientBarrierTable}
-            WHERE id NOT IN (SELECT id FROM {dbTargetSchema}.{dbGradientBarrierTable})
+            WHERE id NOT IN (SELECT barrier_id FROM {dbTargetSchema}.barrier_passability)
         """
 
         with conn.cursor() as cursor:
@@ -235,7 +226,7 @@ def breakstreams (conn):
         conn.commit()
 
         query = f"""
-            SELECT id
+            SELECT id, code
             FROM {dbTargetSchema}.fish_species
             WHERE code = '{code}'
         """ 
@@ -246,7 +237,7 @@ def breakstreams (conn):
         conn.commit()
 
         query = f"""
-            SELECT id
+            SELECT id, code
             FROM {dbTargetSchema}.fish_species
             WHERE code != '{code}'
         """
@@ -265,10 +256,12 @@ def breakstreams (conn):
             for s in species:
                 passability_feature.append(feature[0])
                 passability_feature.append(s[0])
+                passability_feature.append(s[1])
                 passability_feature.append(0)
             for s in other_species:
                 other_passability_feature.append(feature[0])
                 other_passability_feature.append(s[0])
+                other_passability_feature.append(s[1])
                 other_passability_feature.append(1)
             if len(passability_feature) != 0:
                 passability_data.append(passability_feature)
@@ -286,7 +279,7 @@ def breakstreams (conn):
     print("breaking streams")
     
     query = f"""
-        CREATE TEMPORARY TABLE newstreamlines AS
+        CREATE TABLE {dbTargetSchema}.newstreamlines AS
         
         with breakpoints as (
             SELECT a.{appconfig.dbIdField} as id, 
@@ -308,6 +301,7 @@ def breakstreams (conn):
                 y.source_id,
                 y.{appconfig.dbWatershedIdField},
                 y.sec_code,
+                y.sec_name,
                 y.stream_name,
                 y.strahler_order,
                 {appconfig.streamTableChannelConfinementField},
@@ -318,15 +312,15 @@ def breakstreams (conn):
              ON y.{appconfig.dbIdField} = z.{appconfig.dbIdField};
         
         DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} 
-        WHERE {appconfig.dbIdField} IN (SELECT {appconfig.dbIdField} FROM newstreamlines);
+        WHERE {appconfig.dbIdField} IN (SELECT {appconfig.dbIdField} FROM {dbTargetSchema}.newstreamlines);
         
               
         INSERT INTO  {dbTargetSchema}.{dbTargetStreamTable} 
-            (id, source_id, {appconfig.dbWatershedIdField}, sec_code, stream_name, strahler_order, 
+            (id, source_id, {appconfig.dbWatershedIdField}, sec_code, sec_name, stream_name, strahler_order, 
             segment_length, w_segment_length,
             {appconfig.streamTableChannelConfinementField},{appconfig.streamTableDischargeField},
             mainstem_id, geometry)
-        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code,
+        SELECT gen_random_uuid(), a.source_id, a.{appconfig.dbWatershedIdField}, a.sec_code, a.sec_name,
             a.stream_name, a.strahler_order,
             st_length2d(a.geometry) / 1000.0, 
             case strahler_order 
@@ -337,15 +331,15 @@ def breakstreams (conn):
             a.{appconfig.streamTableChannelConfinementField},
             a.{appconfig.streamTableDischargeField}, 
             mainstem_id, a.geometry
-        FROM newstreamlines a;
+        FROM {dbTargetSchema}.newstreamlines a;
 
-        UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
+        --UPDATE {dbTargetSchema}.{dbTargetStreamTable} set geometry = st_snaptogrid(geometry, 0.01);
         DELETE FROM {dbTargetSchema}.{dbTargetStreamTable} WHERE ST_IsEmpty(geometry);
 
         DROP INDEX IF EXISTS {dbTargetSchema}."smooth_geom_idx";
         CREATE INDEX smooth_geom_idx ON {dbTargetSchema}.{dbTargetStreamTable} USING gist({dbTargetGeom});
         
-        DROP TABLE newstreamlines;
+        DROP TABLE {dbTargetSchema}.newstreamlines;
     
     """
         
@@ -419,41 +413,6 @@ def updateBarrier(connection):
             WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
     """
 
-    # query = f"""
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} DROP COLUMN IF EXISTS stream_id;
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN IF NOT EXISTS stream_id_up uuid;
-        
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable} SET stream_id_up = null;
-        
-    #     WITH ids AS (
-    #         SELECT a.id as stream_id, b.id as barrier_id
-    #         FROM {dbTargetSchema}.{dbTargetStreamTable} a,
-    #             {dbTargetSchema}.{dbBarrierTable} b
-    #         WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-    #             st_intersects(st_endpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
-    #     )
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable}
-    #         SET stream_id_up = a.stream_id
-    #         FROM ids a
-    #         WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
-            
-    #     ALTER TABLE {dbTargetSchema}.{dbBarrierTable} ADD COLUMN IF NOT EXISTS stream_id_down uuid;
-
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable} SET stream_id_down = null;
-        
-    #     WITH ids AS (
-    #         SELECT a.id as stream_id, b.id as barrier_id
-    #         FROM {dbTargetSchema}.{dbTargetStreamTable} a,
-    #             {dbTargetSchema}.{dbBarrierTable} b
-    #         WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-    #             st_intersects(st_startpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
-    #     )
-    #     UPDATE {dbTargetSchema}.{dbBarrierTable}
-    #         SET stream_id_down = a.stream_id
-    #         FROM ids a
-    #         WHERE a.barrier_id = {dbTargetSchema}.{dbBarrierTable}.id;
-    # """
-
     # print(query)
     with connection.cursor() as cursor:
         cursor.execute(query)
@@ -461,12 +420,22 @@ def updateBarrier(connection):
                         
 def main():
     with appconfig.connectdb() as connection:
-        query = f"""
-        SELECT code
-        FROM {dataSchema}.{appconfig.fishSpeciesTable};
-        """
 
         global specCodes
+
+        specCodes = [substring.strip() for substring in specCodes.split(',')]
+
+        if len(specCodes) == 1:
+            specCodes = f"('{specCodes[0]}')"
+        else:
+            specCodes = tuple(specCodes)
+
+
+        query = f"""
+        SELECT code
+        FROM {dataSchema}.{appconfig.fishSpeciesTable}
+        WHERE code IN {specCodes};
+        """
 
         with connection.cursor() as cursor:
             cursor.execute(query)

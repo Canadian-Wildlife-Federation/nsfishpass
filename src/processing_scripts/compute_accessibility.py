@@ -31,6 +31,7 @@ dbTargetSchema = appconfig.config[iniSection]['output_schema']
 watershed_id = appconfig.config[iniSection]['watershed_id']
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
 updateTable = dbTargetSchema + ".habitat_access_updates"
+species = appconfig.config[iniSection]['species']
     
 def computeAccessibility(connection):
         
@@ -42,12 +43,16 @@ def computeAccessibility(connection):
     with connection.cursor() as cursor:
         cursor.execute(query)
         features = cursor.fetchall()
+
+        global species
+
+        features = [substring.strip() for substring in species.split(',')]
         
         for feature in features:
-            code = feature[0]
-            name = feature[1]
+            code = feature
+            # name = feature[1]
 
-            print("  processing " + name)
+            print("  processing " + feature)
 
             if code == 'as':
                 # initial accessibility calculation

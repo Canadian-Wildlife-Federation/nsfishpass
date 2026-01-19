@@ -34,8 +34,11 @@ else:
     workingWatershedId = tuple(workingWatershedId)
 
 dbTargetStreamTable = appconfig.config['PROCESSING']['stream_table']
-watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
-secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+# watershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['watershed_table']
+# secondaryWatershedTable = appconfig.config['CREATE_LOAD_SCRIPT']['secondary_watershed_table']
+
+watershedTable = appconfig.watershedTable
+secondaryWatershedTable = appconfig.secondaryWatershedTable
 
 publicSchema = "public"
 aoi = "chyf_aoi"
@@ -93,16 +96,13 @@ def main():
             ALTER DEFAULT PRIVILEGES IN SCHEMA {dbTargetSchema} GRANT SELECT ON TABLES TO public;
 
             INSERT INTO {dbTargetSchema}.{dbTargetStreamTable} 
-                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}, sec_code, sec_name,
-                stream_name, strahler_order, geometry)
-            SELECT gen_random_uuid(), t1.id, t1.aoi_id,
-                t3.SEC_CODE,
-                t1.watershed_name,
+                ({appconfig.dbIdField}, source_id, {appconfig.dbWatershedIdField}
+                ,stream_name, strahler_order, geometry)
+            SELECT DISTINCT ON (t1.id) gen_random_uuid(), t1.id, t1.aoi_id,
                 t1.rivername1, t1.strahler_order,
                 (ST_Dump((ST_Intersection(t1.geometry, t2.geometry)))).geom
             FROM {appconfig.dataSchema}.{appconfig.streamTable} t1
             JOIN {appconfig.dataSchema}.{appconfig.watershedTable} t2 ON ST_Intersects(t1.geometry, t2.geometry)
-            LEFT JOIN {appconfig.dataSchema}.{secondaryWatershedTable} t3 ON ST_Intersects(t1.geometry, t3.geometry)
             WHERE aoi_id IN {aoi_ids};
 
             -------------------------
@@ -130,7 +130,26 @@ def main():
             ALTER TABLE  {dbTargetSchema}.{dbTargetStreamTable} OWNER TO cwf_analyst;
        
         """
-        
+        # print(query)
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+        conn.commit()
+
+        if secondaryWatershedTable != 'None':
+            query = f"""
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} s
+            SET 
+                sec_code = t3.SEC_CODE,
+                sec_name = t3.SEC_NAME
+            FROM {appconfig.dataSchema}.{secondaryWatershedTable} t3 
+            WHERE ST_Intersects(s.geometry, t3.geometry)
+            """
+        else:
+            query = f"""
+            UPDATE {dbTargetSchema}.{dbTargetStreamTable} s
+            SET 
+                sec_name = '{iniSection}'
+            """
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

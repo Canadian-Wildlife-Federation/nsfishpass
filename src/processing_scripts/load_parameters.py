@@ -25,10 +25,16 @@
 
 import appconfig
 import subprocess
+import sys
 
-dataFile = appconfig.config['DATABASE']['fish_parameters']
+# dataFile = appconfig.config['DATABASE']['fish_parameters']
 sourceTable = appconfig.dataSchema + ".fish_species_raw"
-fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+# fishSpeciesTable = appconfig.config['DATABASE']['fish_species_table']
+
+dataFile = appconfig.fish_parameters
+fishSpeciesTable = appconfig.fishSpeciesTable
+
+specCodes = appconfig.getSpecies()
 
 def main():
     with appconfig.connectdb() as conn:
@@ -56,6 +62,7 @@ def main():
                 mi_kmaw_name varchar,
                 
                 accessibility_gradient double precision not null,
+                fall_height_threshold double precision not null,
                 
                 spawn_gradient_min numeric,
                 spawn_gradient_max numeric,
@@ -86,6 +93,7 @@ def main():
                 mi_kmaw_name,
 
                 accessibility_gradient,
+                fall_height_threshold,
 
                 spawn_gradient_min,
                 spawn_gradient_max,
@@ -108,6 +116,7 @@ def main():
                 a.mi_kmaw_name,
 
                 a.accessibility_gradient,
+                a.fall_height_threshold,
 
                 a.spawn_gradient_min,
                 a.spawn_gradient_max,
@@ -129,7 +138,7 @@ def main():
             """
         
         # print(query)
-
+        # sys.exit()
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

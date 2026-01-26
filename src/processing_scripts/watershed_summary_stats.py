@@ -20,7 +20,7 @@
 # This script summarizes watershed data creating a statistic createTable
 # and populating it with various stats 
 #
-#
+# Author: Andrew Pozzuoli
  
 
 import appconfig

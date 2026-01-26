@@ -1,3 +1,27 @@
+#----------------------------------------------------------------------------------
+#
+# Copyright 2022 by Canadian Wildlife Federation, Alberta Environment and Parks
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+#----------------------------------------------------------------------------------
+#
+# This script processes the habitat updates loaded in load_habitat_updates.py
+#
+# Author: Andrew Pozzuoli
+#
+
+
 from psycopg2.extras import DictCursor
 import appconfig
 
@@ -28,6 +52,9 @@ def getPoints(conn):
     return points
 
 def getUpstreamDownstream(conn):
+    """
+    Get the nearest upstream and downstream segment id of each habitat point
+    """
 
     print("Getting upstream and downstream stream ids")
 
@@ -70,7 +97,10 @@ def getUpstreamDownstream(conn):
         cursor.execute(query)
     conn.commit()
 
+    # TODO: Functions do not have to be dropped and recreated on every model run.
+    # They can probably just be created once at model initialization
     query = f"""
+        -- This function returns all stream segments downstream of a given stream id or up to a limit if provided
         DROP FUNCTION IF EXISTS public.downstream;
         CREATE OR REPLACE FUNCTION public.downstream(sid uuid, limit_id uuid DEFAULT NULL)
         RETURNS TABLE (stream_id uuid)
@@ -106,6 +136,7 @@ def getUpstreamDownstream(conn):
         END; $$
         IMMUTABLE;
 
+        -- This function returns all stream segments upstream of a given id or up to a limit id if provided
         DROP FUNCTION IF EXISTS public.upstream;
         CREATE OR REPLACE FUNCTION public.upstream(sid uuid, limit_id uuid DEFAULT NULL)
         RETURNS TABLE (stream_id uuid)
@@ -146,6 +177,13 @@ def getUpstreamDownstream(conn):
     conn.commit()
 
 def processStreams(points, codes, conn):
+    """
+    The main function assigning habitat data to the streams
+    
+    :param points: List of dictionaries returned by the DictCursor in getPoints()
+    :param codes: Species codes
+    :param conn: db connection
+    """
 
     print("Processing updates to accessibility and habitat")
 
@@ -168,8 +206,14 @@ def processStreams(points, codes, conn):
 
             if species == code:
 
+                # TODO: This large list of conditionals could probably be pared down or made more readable
+                # An analysis should be conducted on how we could improve the readability of this
+
+                # accessible between two points
+                # 'point' is the upstream point
                 if (update_type == 'access' and pair_id and upstream):
 
+                    # get the downstream point related to the upstream point
                     query = f"""
                     SELECT stream_id_up, stream_id_down FROM {dbTargetSchema}.{dbHabAccessUpdates} WHERE pair_id = '{pair_id}' AND downstream is true;
                     """
@@ -181,6 +225,7 @@ def processStreams(points, codes, conn):
                     for r in result:
                         pair_stream_id_down = r['stream_id_down']
 
+                        # update all stream segments between the points as accessible to the species
                         query = f"""
                             UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}'
                             WHERE {dbIdField} IN (SELECT public.downstream('{stream_id_down}', '{pair_stream_id_down}'));
@@ -190,8 +235,10 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # accessible up to point
                 elif (update_type == 'access' and pair_id is None and not upstream and not downstream):
 
+                    # assign all downstream segments as accessible to the species
                     query = f"""
                         --UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {code}_accessibility = '{appconfig.Accessibility.NOT.value}'
                         --WHERE {dbIdField} IN (SELECT public.upstream('{stream_id_up}'));
@@ -204,8 +251,10 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # accessible upstream from point
                 elif (update_type == 'access' and pair_id is None and upstream and not downstream):
 
+                    # assign all upstream segments as accessible to the species
                     query = f"""
                         UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}'
                         WHERE {dbIdField} IN (SELECT public.upstream('{stream_id_up}'));
@@ -215,8 +264,11 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # accessible up to point 
+                # TODO: redundant - should modify condition on line 236 to include
                 elif (update_type == 'access' and pair_id is None and downstream and not upstream):
 
+                    # assign all downstream segments as accessible to the species
                     query = f"""
                         UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET {code}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}'
                         WHERE {dbIdField} IN (SELECT public.downstream('{stream_id_down}'));
@@ -226,8 +278,11 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # spawning habitat between two points 
+                # 'point' is the upstream point
                 elif (update_type == 'habitat' and habitat_type == 'spawning' and pair_id and upstream):
 
+                    # get downstream point
                     query = f"""
                     SELECT stream_id_up, stream_id_down FROM {dbTargetSchema}.{dbHabAccessUpdates} WHERE pair_id = '{pair_id}' AND downstream is true;
                     """
@@ -239,6 +294,7 @@ def processStreams(points, codes, conn):
                     for r in result:
                         pair_stream_id_down = r['stream_id_down']
 
+                        # assign species spawning habitat for segments between the two points
                         query = f"""
                             UPDATE {dbTargetSchema}.{dbTargetStreamTable} SET habitat_spawn_{code} = true
                             WHERE {dbIdField} IN (SELECT public.downstream('{stream_id_down}', '{pair_stream_id_down}'));
@@ -248,6 +304,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # rearing habitat between two points
                 elif (update_type == 'habitat' and habitat_type == 'rearing' and pair_id and upstream):
 
                     query = f"""
@@ -270,6 +327,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # general habitat between two points
                 elif (update_type == 'habitat' and habitat_type == 'general' and pair_id and upstream):
 
                     query = f"""
@@ -292,6 +350,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # set spawning habitat to false between two points 
                 elif (update_type == 'habitat' and habitat_type == 'not spawning' and pair_id and upstream):
 
                     query = f"""
@@ -314,6 +373,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # set rearing habitat to false between two points
                 elif (update_type == 'habitat' and habitat_type == 'not rearing' and pair_id and upstream):
 
                     query = f"""
@@ -336,6 +396,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # set general, spawning, and rearing habitat to false between two points
                 elif (update_type == 'habitat' and habitat_type == 'not general' and pair_id and upstream):
 
                     query = f"""
@@ -358,6 +419,7 @@ def processStreams(points, codes, conn):
                             cursor.execute(query)
                         conn.commit()
 
+                # set spawning habitat true for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'spawning' and pair_id is None and upstream):
 
                     query = f"""
@@ -369,6 +431,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set spawning habitat true for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'spawning' and pair_id is None and downstream):
 
                     query = f"""
@@ -380,6 +443,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set rearing habitat true for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'rearing' and pair_id is None and upstream):
 
                     query = f"""
@@ -391,6 +455,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set rearing habitat true for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'rearing' and pair_id is None and downstream):
 
                     query = f"""
@@ -402,6 +467,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set general habitat true for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'general' and pair_id is None and upstream):
                     
                     
@@ -414,6 +480,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set general habitat true for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'general' and pair_id is None and downstream):
 
                     query = f"""
@@ -425,6 +492,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set spawning habitat false for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not spawning' and pair_id is None and upstream):
 
                     query = f"""
@@ -436,6 +504,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set spawning habitat false for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not spawning' and pair_id is None and downstream):
 
                     query = f"""
@@ -447,6 +516,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set rearing habitat false for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not rearing' and pair_id is None and upstream):
 
                     query = f"""
@@ -458,6 +528,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set rearing habitat false for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not rearing' and pair_id is None and downstream):
 
                     query = f"""
@@ -469,6 +540,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set all habitat false for all segments upstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not general' and pair_id is None and upstream):
 
                     query = f"""
@@ -480,6 +552,7 @@ def processStreams(points, codes, conn):
                         cursor.execute(query)
                     conn.commit()
 
+                # set all habitat false for all segments downstream of point
                 elif (update_type == 'habitat' and habitat_type == 'not general' and pair_id is None and downstream):
 
                     query = f"""
@@ -498,6 +571,7 @@ def addComments(points, conn):
 
     print("Adding comments to streams")
 
+    # assign comments for single points
     query = f"""
         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS "comments";
         ALTER TABLE {dbTargetSchema}.{dbTargetStreamTable} DROP COLUMN IF EXISTS "comments_source";
@@ -525,6 +599,7 @@ def addComments(points, conn):
         update_type = point['update_type']
         comments = point['comments']
 
+        # assign comments for all segments between two points
         if pair_id and upstream and update_type == 'comment':
 
             query = f"""
@@ -551,6 +626,9 @@ def addComments(points, conn):
             pass
 
 def simplifyHabitatAccess(codes, conn):
+    """
+    Reassign streams marked as accessible to potentially accessible if there are barriers downstream
+    """
 
     # query = f"""
     # SELECT code, name,
@@ -592,7 +670,7 @@ def simplifyHabitatAccess(codes, conn):
 
 def main():
 
-    if iniSection in ['cheticamp', 'stewiacke']:
+    if iniSection in ['cheticamp', 'stewiacke']: # We don't have habitat and accessibility updates in cheticamp and stewiacke
         return
 
     with appconfig.connectdb() as conn:

@@ -20,6 +20,9 @@
 # Removes isolated flowpaths from the stream network
 # ASSUMPTION - data is in equal area projection where distance functions return values in metres
 #
+#
+# Author: Andrew Pozzuoli
+#
 import appconfig
 import networkx as nx
 import shapely.wkb
@@ -79,7 +82,7 @@ def disconnectedIslands(conn):
     for feat in features:
         geom = shapely.wkb.loads(feat[1], hex=True) # linestring from feature of stream network
 
-
+        # build a network
         for i in range(len(geom.coords)-1): 
             G.add_edges_from(
                 [
@@ -194,7 +197,7 @@ def deleteIsolated(conn):
 
 
 def main():
-    if iniSection == 'cheticamp':
+    if iniSection == 'cheticamp': # Don't remove isolated streams in cheticamp
         return
     
     with appconfig.connectdb() as conn:

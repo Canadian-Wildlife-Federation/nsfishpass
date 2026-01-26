@@ -77,7 +77,7 @@ def main():
         query = f"""
             -- upstream ais
             WITH ais_upstr AS (
-                SELECT ais.id, ais.species, b_dnstr.barrier_id as b_dnstr
+                SELECT ais.id, ais.species, b_dnstr.barrier_id as b_dnstr  -- list of ais point, species, and nearest downstream barrier
                 FROM {datatable} ais
                 CROSS JOIN LATERAL
                 (
@@ -89,19 +89,19 @@ def main():
                         WHERE ST_DWithin(ST_StartPoint(w.geometry),ST_EndPoint(n.geometry),0.01)                        -- recursively get next stream segment by finding where the startpt of next segment is within 0.01
                         AND n.id IS NOT NULL                                                                            -- of endpt of this segment    
                     )
-                    SELECT u.id as stream_id, b.id as barrier_id, b.barrier_cnt_downstr_as
-                    FROM upstream u
+                    SELECT u.id as stream_id, b.id as barrier_id, b.barrier_cnt_downstr_as                              -- identify the nearest barrier downstream of the ais point
+                    FROM upstream u                                                                                     
                     INNER JOIN {iniSection}.barriers b
                         ON b.stream_id_down = u.id
                     WHERE b.barrier_cnt_downstr_as = (
-                        SELECT MIN(b.barrier_cnt_downstr_as) 
+                        SELECT MIN(b.barrier_cnt_downstr_as)                                                             
                         FROM upstream u
                         INNER JOIN {iniSection}.barriers b
                             ON b.stream_id_down = u.id
                     )
                 ) AS b_dnstr
             )
-            UPDATE {iniSection}.barriers b
+            UPDATE {iniSection}.barriers b                      -- add to list of species of ais upstream of a given barrier
             SET ais_upstr = array_append(ais_upstr, au.species)
             FROM ais_upstr au
             WHERE au.b_dnstr = b.id;

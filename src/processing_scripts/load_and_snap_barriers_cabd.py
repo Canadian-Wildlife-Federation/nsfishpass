@@ -351,6 +351,9 @@ def main():
                 END LOOP;
             END;
             $$ LANGUAGE plpgsql;
+            ALTER FUNCTION public.snap_to_network
+            OWNER TO cwf_analyst;
+
          
             SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
 

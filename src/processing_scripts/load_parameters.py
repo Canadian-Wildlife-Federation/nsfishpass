@@ -138,6 +138,7 @@ def main():
 
             DROP TABLE {sourceTable};
             """
+
         
         # print(query)
         # sys.exit()

@@ -675,3 +675,10 @@ join_distance = distance (in working srid units) for joining assessment data wit
 stats_table = name of the table to be created in the [DATABASE].data_schema schema which will contain watershed statistics
 
 watershed_data_schemas = the list of processing schemas to include in the stats table; the schemas must exist and data must be fully processed
+
+## DEM loading scrips
+
+Within the DEM_loading_scrips folder there are scrips that will generate a DEM list within QGIS 
+- DEM_list: this script will generate a list based on the cropped DEM index file from QGIS.
+- extract_elevation_data: this script will download the DEMs generated from a list in DEM_list.
+- fix_dems: this script checks to see if there are copies of the same DEM file.

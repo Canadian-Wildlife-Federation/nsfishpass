@@ -24,6 +24,15 @@
 import subprocess
 import appconfig
 
+
+# MUCH EASIER TO SET THESE IN COMPUTER HOWEVER REQUIRE ADMIN PRIVILEGES FOR THIS
+# ONLY SET THESE IF MODEL OUTPUTS ERROR: CANNOT FIND PROJ.DB
+#-----------------------------------------------------------------------------------
+# import os
+# os.environ['PROJ_LIB'] = r'C:\Program Files\QGIS 3.22.1\share\proj'
+# os.environ['PROJ_DATA'] = r'C:\Program Files\QGIS 3.22.1\share\proj'
+#-----------------------------------------------------------------------------------
+
 iniSection = appconfig.args.args[0]
 streamTable = appconfig.config['DATABASE']['stream_table']
 dbTargetSchema = appconfig.config[iniSection]['output_schema']
@@ -52,7 +61,7 @@ def main():
         layer = "habitat_access_updates"
         orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
         pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt CONVERT_TO_LINEAR  -nln "' + dbTargetSchema + '.' + datatable + '" -lco GEOMETRY_NAME=geometry "' + file + '" ' + layer
-        #print(pycmd)
+        print(pycmd)
         subprocess.run(pycmd)
         
         query = f"""

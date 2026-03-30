@@ -17,7 +17,8 @@
 #----------------------------------------------------------------------------------
 
 #
-# This script loads gdb files into postgis database, create by the create_db.py script
+# This script loads gpkg files into postgis database
+# If the db does not exist, create it using the create_db.py script
 #
 import subprocess
 import appconfig
@@ -30,6 +31,7 @@ watershedTable = appconfig.watershedTable
 secondaryWatershedTable = appconfig.secondaryWatershedTable
 tidalZones = appconfig.tidalZones
 
+# location of gpkg files containing raw data to load
 file = appconfig.config['CREATE_LOAD_SCRIPT']['raw_data']
 watershedfile = appconfig.watershedfile
 tidalZoneFile = appconfig.watershedTable
@@ -52,7 +54,7 @@ def loadWatersheds(conn):
     #     cursor.execute(query)
     # conn.commit()
 
-
+    # loads layers from gpkg files to the database
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nlt geometry -nln "' + datatable + '" -nlt CONVERT_TO_LINEAR -lco GEOMETRY_NAME=geometry "' + watershedfile + '" ' + layer
     subprocess.run(pycmd)
     
@@ -65,6 +67,13 @@ def loadWatersheds(conn):
     conn.commit()
 
 def loadSecondaryWatersheds(conn):
+    """
+    Nova Scotia divides its larger watersheds into secondary and tertiary watersheds.
+    Our WCRPs in Nova Scotia work on the secondary watershed scale.
+    This loads those secondary watersheds.
+    
+    :param conn: database connection
+    """
     print("Loading secondary watershed boundaries")
     layers = [secondaryWatershedTable]
 
@@ -98,6 +107,11 @@ def loadSecondaryWatersheds(conn):
 
 
 def loadTidalZones(conn):
+    """
+    Nova Scotia secondary watersheds also have tidal zones defined which connect to the coastlines.
+    
+    :param conn: db connection
+    """
     print("Loading tidal zones")
     layer = tidalZones
 
@@ -143,11 +157,13 @@ def loadStreams(conn):
         cursor.execute(query)
         rows = cursor.fetchall()
 
+    # Puts aoiTuple in a bracketed string to be used in SQL where clauses
     if len(rows) == 1:
         aoiTuple = f"('{rows[0]['id']}')"
     else:
         aoiTuple = tuple([row['id'] for row in rows])
     
+    # Create stream tables within AOI boundaries
     query = f"""
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{streamTable};
     DROP TABLE IF EXISTS {appconfig.dataSchema}.{flowpathProperties};

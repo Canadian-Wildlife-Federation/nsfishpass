@@ -19,6 +19,12 @@
 #
 # This script generates a query to automatically rank barriers in a watershed
 # for Nova Scotia watersheds
+#
+#
+#
+# Author: Andrew Pozzuoli
+#
+# see: https://www.notion.so/cwf-spatial/Automated-Barrier-Ranking-Process-443527ac60424dd7963a55e2bfe33807
 
 import appconfig
 
@@ -80,7 +86,9 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         ,b.stream_id_up
         ,b.func_upstr_hab_{species_code} 
         ,b.total_upstr_hab_{species_code}
-        ,b.w_func_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_func_upstr_hab_{species_code}
+        -- habitat on 1st order streams is down-weighted by 0.75 and 0.25 on 2nd order streams
+        -- and the habitat is also down-weighted by the passability status of the barrier
+        ,b.w_func_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_func_upstr_hab_{species_code}      
         ,b.w_total_upstr_hab_{species_code} * (1 - passability_status::double precision) as w_total_upstr_hab_{species_code}
         ,bp.passability_status INTO {wcrp}.ranked_barriers_{species_code}_{watershed}
     FROM {wcrp}.barriers b
@@ -104,6 +112,8 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         cursor.execute(query)
     conn.commit()
     
+
+    # Group barriers where it would be better to restore them together
     query = f"""
     --TO FIX: some group_ids need to get combined - e.g., multiple branches of river
     ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} ADD COLUMN IF NOT EXISTS mainstem_id uuid;
@@ -118,6 +128,7 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
     )
 
+    -- Start by assigning all barriers on the same mainstem_id to a group
     UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed} a SET group_id = m.group_id FROM mainstems m WHERE m.mainstem_id = a.mainstem_id;
     """
 
@@ -126,6 +137,10 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     conn.commit()
         
     query = f"""
+    -- Iterate over barriers on a mainstem
+    -- calculate average gain per barrier with each additional barrier starting from mouth
+    -- at first barrier where the average gain decreases, stop and group all barriers up to that point together under the same group_id
+    -- then proceed to next barrier after group
     DO $$
     DECLARE
         continue_loop BOOLEAN := TRUE;
@@ -136,18 +151,20 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
             
             i := i + 1;
         
+            -- get any barriers which have not been assigned a group id following the id rules (> grp_offset)
             perform id, group_id
             from {wcrp}.ranked_barriers_{species_code}_{watershed}
             where group_id < grp_offset
             LIMIT 1;
 
-            IF NOT FOUND THEN
+            IF NOT FOUND THEN               -- all barriers have been assigned a group_id
                 continue_loop := FALSE;
             ELSE
                 with avgVals as (
                     select id, mainstem_id, group_id, barrier_cnt_upstr_{species_code}, func_upstr_hab_{species_code}
-                        ,AVG(w_func_upstr_hab_{species_code}) OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as average
-                        ,ROW_NUMBER() OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as row_num
+                        -- This will get the avg gain per barrier as you add each barrier along a mainstem from mouth to tail
+                        ,AVG(w_func_upstr_hab_{species_code}) OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as average         -- Running average gain per barrier in group ordered by most to least upstream barriers
+                        ,ROW_NUMBER() OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as row_num                                 -- row number over barriers in each group ordered by most to least upstream barriers
                     from {wcrp}.ranked_barriers_{species_code}_{watershed}
                     where group_id < grp_offset
                     order by group_id, barrier_cnt_upstr_{species_code} DESC
@@ -155,26 +172,27 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
                 max_grp_gain as (
                     select 
                         group_id
-                        ,max(average) as best_gain
+                        ,max(average) as best_gain      -- from avgVals, select the maximum average value for each group_id
                     from avgVals
                     group by group_id
                     order by group_id
                 ),
                 part as (
-                    select mx.*, av.row_num 
+                    select mx.*, av.row_num                         -- select the row number in avgVals of which barrier gives the max avg value for a given group_id
                     from max_grp_gain mx
                     join avgVals av on mx.best_gain = av.average
                 ),
                 new_grps as (
                     select av.id
                         ,CASE 
-                            WHEN av.row_num <= part.row_num THEN (av.group_id*grp_offset) + i
-                            ELSE av.group_id
+                            WHEN av.row_num <= part.row_num THEN (av.group_id*grp_offset) + i       -- assign all barriers up to row number that gives max avg gain the same group_id
+                            ELSE av.group_id                                                        -- leave rest of river stem unassigned so they are grouped on next iteration
                         END as new_group_id
                     from avgVals av
                     join part on av.group_id = part.group_id
                 )
 
+                -- assign new group_ids
                 update {wcrp}.ranked_barriers_{species_code}_{watershed}
                 set group_id = new_grps.new_group_id
                 from new_grps
@@ -185,6 +203,7 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         END LOOP;
     END $$;
 
+    -- Use this to verify groupings
     select id, mainstem_id, group_id, barrier_cnt_upstr_{species_code}, func_upstr_hab_{species_code}
         ,AVG(w_func_upstr_hab_{species_code}) OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as average
         ,ROW_NUMBER() OVER(PARTITION BY group_id ORDER BY barrier_cnt_upstr_{species_code} DESC) as row_num
@@ -267,6 +286,8 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} 
     ADD rank_w_avg_gain_tiered numeric;
 
+    -- sort barriers by number of downstream barriers (least to most) and then by weighted average gain per barrier
+    -- move all groups that block < 500m of habitat to bottom
     WITH sorted AS (
         SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,passability_status
@@ -274,6 +295,7 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
         WHERE w_avg_gain_per_barrier >= 0.5
         UNION ALL
+        -- barrier groups which block less than 500m of habitat are moved to the bottom of the rankings
         SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,passability_status
             ,(SELECT MAX(row_num) FROM (
@@ -293,11 +315,11 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
     )
     UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed} 
-    SET rank_w_avg_gain_tiered = ranks.ranks
+    SET rank_w_avg_gain_tiered = ranks.ranks                                -- assign all barriers in group the same rank based on sorting above
     FROM ranks
     WHERE {wcrp}.ranked_barriers_{species_code}_{watershed}.id = ranks.id;
 
-    -- Rank based on total habitat upstream (potential gain)
+    -- Rank based on total habitat upstream (potential gain if all barriers upstream were removed as well)
     ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} 
     ADD rank_w_total_upstr_hab numeric;
 
@@ -326,6 +348,7 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     ALTER TABLE {wcrp}.ranked_barriers_{species_code}_{watershed} 
     ADD rank_combined numeric;
 
+    -- Add the immediate and long-term ranks together and sort by this value least to greatest to get final ranking
     WITH ranks AS (
         SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, total_upstr_hab_{species_code}, total_hab_gain_group, avg_gain_per_barrier
             ,rank_w_avg_gain_tiered

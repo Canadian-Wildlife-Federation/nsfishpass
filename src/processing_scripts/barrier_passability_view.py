@@ -18,7 +18,7 @@
 
 #
 # This script creates the barrier_passability_view table which shows all dams, waterfalls, and modelled crossings along
-# with their passability
+# with their passability and tracking table values
 #
 # This script also creates the natural_barriers_vw which shows all waterfalls and gradient barriers along with their passabilities
 #
@@ -37,8 +37,8 @@ def build_views(conn):
     # create view combining barrier and passability table
     # programmatically build columns, joins, and conditions based on species in species table
 
-    if iniSection == 'cmm':
-        wcrp = 'st_croix'
+    if iniSection == 'cmm': 
+        wcrp = 'st_croix'       # cmm scope was reduced to only the st. croix secondary watershed. If cmm is specified in config file, we only want st. croix.
     else:
         wcrp = iniSection
 

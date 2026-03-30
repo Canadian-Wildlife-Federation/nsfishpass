@@ -19,6 +19,12 @@
 #
 # This script loads fish aquatic invasive species data to the barriers table
 #
+# This script assumes aquatic_invasive_species is already a table in the wcrp schema
+# The data from this table is then copied to the barriers table by this script
+#
+# For NSFishPass, this step was done manually since it only applied to cmm wcrp
+# In the future, the step of loading aquatic invasive species data could maybe be done automatically or in some other way.
+#
 import subprocess
 import appconfig
 
@@ -71,31 +77,31 @@ def main():
         query = f"""
             -- upstream ais
             WITH ais_upstr AS (
-                SELECT ais.id, ais.species, b_dnstr.barrier_id as b_dnstr
+                SELECT ais.id, ais.species, b_dnstr.barrier_id as b_dnstr  -- list of ais point, species, and nearest downstream barrier
                 FROM {datatable} ais
                 CROSS JOIN LATERAL
                 (
                     WITH RECURSIVE upstream(id, geometry) AS (
-                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = CAST(ais.stream_id AS uuid)
+                        SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = CAST(ais.stream_id AS uuid)      -- Initial step at stream segment of ais point
                         UNION ALL
-                        SELECT n.id, n.geometry
+                        SELECT n.id, n.geometry                                                                         -- union with all stream segments upstream
                         FROM {iniSection}.{streamTable} n, upstream w
-                        WHERE ST_DWithin(ST_StartPoint(w.geometry),ST_EndPoint(n.geometry),0.01)
-                        AND n.id IS NOT NULL
+                        WHERE ST_DWithin(ST_StartPoint(w.geometry),ST_EndPoint(n.geometry),0.01)                        -- recursively get next stream segment by finding where the startpt of next segment is within 0.01
+                        AND n.id IS NOT NULL                                                                            -- of endpt of this segment    
                     )
-                    SELECT u.id as stream_id, b.id as barrier_id, b.barrier_cnt_downstr_as
-                    FROM upstream u
+                    SELECT u.id as stream_id, b.id as barrier_id, b.barrier_cnt_downstr_as                              -- identify the nearest barrier downstream of the ais point
+                    FROM upstream u                                                                                     
                     INNER JOIN {iniSection}.barriers b
                         ON b.stream_id_down = u.id
                     WHERE b.barrier_cnt_downstr_as = (
-                        SELECT MIN(b.barrier_cnt_downstr_as) 
+                        SELECT MIN(b.barrier_cnt_downstr_as)                                                             
                         FROM upstream u
                         INNER JOIN {iniSection}.barriers b
                             ON b.stream_id_down = u.id
                     )
                 ) AS b_dnstr
             )
-            UPDATE {iniSection}.barriers b
+            UPDATE {iniSection}.barriers b                      -- add to list of species of ais upstream of a given barrier
             SET ais_upstr = array_append(ais_upstr, au.species)
             FROM ais_upstr au
             WHERE au.b_dnstr = b.id;

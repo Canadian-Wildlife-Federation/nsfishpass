@@ -18,6 +18,8 @@
 
 #
 # This script loads updates to habitat and accessibility information into the database
+# Necessary step if habitat table does not exist yet
+# and if habitat data is coming from an external geopackage
 #
 import subprocess
 import appconfig
@@ -43,7 +45,8 @@ snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
 def main():
 
-    if iniSection in ['cheticamp', 'stewiacke']:
+    # we only have habitat data for some WCRPs
+    if iniSection in ['cheticamp', 'stewiacke']: 
         return
 
     with appconfig.connectdb() as conn:
@@ -53,6 +56,7 @@ def main():
             cursor.execute(query)
         conn.commit()
 
+        # As with barrier updates, we can initially load habitat updates from an existing geopackage or from the existing data layer
         print("Loading habitat and accessibility updates")
         layer = "habitat_access_updates"
         orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
@@ -61,6 +65,7 @@ def main():
         subprocess.run(pycmd)
         
         query = f"""
+        -- original geopkg with observations did not include id column so generate here
         ALTER TABLE {dbTargetSchema}.{datatable} DROP COLUMN IF EXISTS id;
         ALTER TABLE {dbTargetSchema}.{datatable} add column id uuid;
         UPDATE {dbTargetSchema}.{datatable} set id = gen_random_uuid();
@@ -70,6 +75,8 @@ def main():
         
         --SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '{snapDistance}');
 
+        -- fish observations are placed in QGIS
+        -- snap to nearest point on stream here
         SELECT public.snap_to_network('{dbTargetSchema}', '{datatable}', 'geometry', 'snapped_point', '125');
 
         CREATE INDEX {datatable}_snapped_point_idx ON {dbTargetSchema}.{datatable} USING gist (snapped_point);
@@ -79,6 +86,7 @@ def main():
         ALTER TABLE {dbTargetSchema}.{datatable} add column stream_id uuid;
         ALTER TABLE {dbTargetSchema}.{datatable} add column stream_measure numeric;
         
+        -- add stream id and stream measure of nearest stream segment to habitat point
         with match as (
         SELECT a.id as stream_id, b.id as pntid, st_linelocatepoint(a.geometry, b.snapped_point) as streammeasure
         FROM {dbTargetSchema}.{dbTargetStreamTable} a, {dbTargetSchema}.{datatable} b

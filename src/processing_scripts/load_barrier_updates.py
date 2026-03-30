@@ -20,10 +20,16 @@
 # This script loads a barrier updates file into the database, and
 # joins these updates to their respective tables. It can add, delete,
 # and modify features of any barrier type.
+
+# This script assumes model reruns happen from the beginning (initializing the barriers tables)
+# This script should not be run on its own outside of the context of the rest of model runs otherwise it will stack new crossings over existing ones
 #
 # The script assumes the barrier updates file only contains data
 # for a single watershed.
 #
+# This script will become defunct once crossings are brought in through the CABD
+#
+# Author: Andrew Pozzuoli
 
 import subprocess
 import appconfig
@@ -98,12 +104,14 @@ def loadBarrierUpdates(connection):
         cursor.execute(query)
     connection.commit()
         
-    # load updates into a table
+    # load updates into a table, useful if importing barrier updates from a geopackage
+    # if rawData refers to the layer name then it'll just use the existing data layer in the db
     orgDb="dbname='" + appconfig.dbName + "' host='"+ appconfig.dbHost+"' port='"+appconfig.dbPort+"' user='"+appconfig.dbUser+"' password='"+ appconfig.dbPassword+"'"
 
     pycmd = '"' + appconfig.ogr + '" -overwrite -f "PostgreSQL" PG:"' + orgDb + '" -t_srs EPSG:' + appconfig.dataSrid + ' -nln "' + dbTargetSchema + '.' + dbTargetTable + '" -lco GEOMETRY_NAME=geometry "' + rawData + '" -oo EMPTY_STRING_AS_NULL=YES'
     subprocess.run(pycmd)
 
+    # Copy existing table to archive to support stable ids
     query = f"""
         DROP TABLE IF EXISTS {dbTargetSchema}.{dbTargetTable}_archive;
         CREATE TABLE {dbTargetSchema}.{dbTargetTable}_archive
@@ -122,6 +130,10 @@ def loadBarrierUpdates(connection):
     connection.commit()
 
 def joinBarrierUpdates(connection):
+    """
+    Barrier updates are edited in QGIS by placing a point near the crossing to be updated.
+    This function joins the placed point to the crossing to be updated.
+    """
 
     query = f"""
         ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN IF NOT EXISTS barrier_id uuid;
@@ -142,7 +154,7 @@ def joinBarrierUpdates(connection):
         cursor.execute(query)
         barrierTypes = cursor.fetchall()
 
-    for bType in barrierTypes:
+    for bType in barrierTypes:  # iterate over barrier type since updates can apply to crossings or dams. Some dams have fishway crossing points in the same spot.
         barrier = bType[0]
         query = f"""
         with match AS (
@@ -196,6 +208,7 @@ def processUpdates(connection):
                 # update most fields
                 cursor.execute(mappingQuery)
 
+                # Get next update ready
                 query = f"""
                     UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_status = 'ready';
                     UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'ready' WHERE update_status = 'wait';
@@ -216,6 +229,7 @@ def processUpdates(connection):
         cursor.execute(query)
     connection.commit()
     
+    # Process multiple updates in order by date
     initializeQuery = f"""
         WITH cte AS (
         SELECT update_id, barrier_id,
@@ -231,6 +245,8 @@ def processUpdates(connection):
         cursor.execute(initializeQuery)
     connection.commit()
 
+    # Insert new points into barrier table
+    # Delete points where indicated
     newDeleteQuery = f"""
         -- new points
         INSERT INTO {dbTargetSchema}.{dbBarrierTable} (
@@ -258,6 +274,7 @@ def processUpdates(connection):
         AND barrier_id IS NOT NULL;
 
         -- barrier ids
+        -- assign barrier id from barrier table to update table
         UPDATE {dbTargetSchema}.{dbTargetTable}
         SET barrier_id = b.id
         FROM {dbTargetSchema}.{dbBarrierTable} b
@@ -278,7 +295,10 @@ def processUpdates(connection):
         cursor.execute(newDeleteQuery)
     connection.commit()
 
-    # passability status 
+    # add new points into the passability table
+    # the passability table is re-initialized with each model run, ensuring that 
+    # these points are unique in the passability table
+    # This script should not be run on its own outside of the context of a full model rerun
     global specCodes
     for s in specCodes:
         s = s[0]
@@ -318,13 +338,14 @@ def processUpdates(connection):
         cursor.execute(updatequery)
     connection.commit()
 
+    # join updates to nearest barrier
     joinBarrierUpdates(connection)
 
     mappingQuery = f"""
         SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
         UPDATE {dbTargetSchema}.{dbBarrierTable} SET snapped_point = original_point WHERE snapped_point IS NULL;
 
-        -- updated points
+        -- update column to show ids of all updates made to a point in the barriers table
         UPDATE {dbTargetSchema}.{dbBarrierTable} AS b SET update_id = 
             CASE
             WHEN b.update_id IS NULL THEN a.update_id::varchar
@@ -334,6 +355,7 @@ def processUpdates(connection):
             WHERE b.id = a.barrier_id
             AND a.update_status = 'ready';
 
+        -- Update features in barrier table to match latest updates
         UPDATE {dbTargetSchema}.{dbBarrierTable} AS b
         SET
             date_examined = CASE WHEN a.date_examined IS NOT NULL THEN a.date_examined ELSE b.date_examined END,
@@ -369,6 +391,7 @@ def processUpdates(connection):
             AND p.species_code = '{s}';
         """ 
 
+    # process barriers with multiple updates
     processMultiple(connection)
 
     removeDuplicatesQuery = f"""
@@ -394,6 +417,9 @@ def processUpdates(connection):
         connection.commit()
 
 def matchArchive(connection):
+    """
+    Ensure IDs are stable across runs
+    """
 
     query = f"""
         WITH matched AS (
@@ -426,6 +452,9 @@ def matchArchive(connection):
 
 
 def tableExists(conn):
+    """
+    Returns true if there is an archive for the barrier updates table
+    """
 
     query = f"""
     SELECT EXISTS(SELECT 1 FROM information_schema.tables 

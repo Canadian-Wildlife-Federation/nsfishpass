@@ -19,12 +19,15 @@
 #
 # This script creates the fish_species table containing accessibility and 
 # habitat parameters for species of interest from a CSV specified by the user
+# Species data comes from a CSV which includes gradient threshold information for 
+# gradient barriers. The CSV location is specified in config file.
 #
 # TO DO: fix problem with this script where it's the only one that doesn't
 # rely on the watershed being specified - this seems to be a problem
 
 import appconfig
 import subprocess
+import sys
 
 # dataFile = appconfig.config['DATABASE']['fish_parameters']
 sourceTable = appconfig.dataSchema + ".fish_species_raw"
@@ -136,6 +139,9 @@ def main():
             DROP TABLE {sourceTable};
             """
 
+        
+        # print(query)
+        # sys.exit()
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()

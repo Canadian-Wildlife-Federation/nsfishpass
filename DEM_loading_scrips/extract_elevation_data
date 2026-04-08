@@ -1,3 +1,68 @@
+# #downloads DEM files automatically using vector files from GOV CAN (more generally: to a polygon feature)
+
+# import os
+# import urllib
+# import urllib.request
+# from pathlib import Path
+# import ssl
+
+# ssl._create_default_https_context = ssl._create_unverified_context
+
+# # change path here to DEM folder (normally in the sharepoint)
+# download_dir = Path(r"D:\CWF\merged")
+
+# def autorename(filename):
+#     """recursive function to add "_c" to a filename if it already exists.
+#     """
+#     if os.path.isfile(filename):
+#         newfilename = f"{os.path.splitext(filename)[0]}_c{os.path.splitext(filename)[1]}"
+#         return autorename(newfilename)
+#     else:
+#         return filename
+
+# # file list derived from QGIS python console where code from DEM_list run in console
+# file_list = open(r"C:\Users\TMillaKoch\repos\QCFishPass\dem_links.txt", 'r').read().strip().split('\n')
+
+# # Clean up the URLs - remove quotes, whitespace, commas, and any other formatting
+# cleaned_file_list = []
+# for url in file_list:
+#     # Remove single quotes, double quotes, commas, and whitespace
+#     clean_url = url.strip().strip('\'"').strip(',').strip()
+#     if clean_url and clean_url.startswith('http'):
+#         cleaned_file_list.append(clean_url)
+#     elif clean_url:  # Show what we're skipping
+#         print(f"Skipping malformed URL: {repr(clean_url)}")
+
+# print(f"Found {len(cleaned_file_list)} valid URLs")
+# print("First few cleaned URLs:")
+# for url in cleaned_file_list[:3]:
+#     print(f"'{url}'")
+
+# file_list = cleaned_file_list
+# file_list.sort()
+
+# # download all files in file list
+# for i, url in enumerate(file_list):
+#     print(f"\n[{i+1}/{len(file_list)}] Processing: {url}")
+    
+#     # Split on the rightmost / and take everything on the right side of that
+#     name = url.rsplit('/', 1)[-1]
+    
+#     # Combine the name and the downloads directory to get the local filename
+#     filename = os.path.join(download_dir, name)
+    
+#     print(f"Downloading {name}")
+    
+#     try:
+#         urllib.request.urlretrieve(url, autorename(filename))
+#         print(f"✓ Successfully downloaded {name}")
+#     except urllib.error.HTTPError as e:
+#         print(f"✗ HTTP Error {e.code}: {e.reason} for {url}")
+#     except Exception as e:
+#         print(f"✗ Error downloading {url}: {e}")
+
+# print("Done!")
+
 #downloads DEM files automatically using vector files from GOV CAN (more generally: to a polygon feature)
 
 import os
@@ -9,19 +74,10 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # change path here to DEM folder (normally in the sharepoint)
-download_dir = Path(r"C:\Users\TMillaKoch\repos\DEM\DEMs")
-
-def autorename(filename):
-    """recursive function to add "_c" to a filename if it already exists.
-    """
-    if os.path.isfile(filename):
-        newfilename = f"{os.path.splitext(filename)[0]}_c{os.path.splitext(filename)[1]}"
-        return autorename(newfilename)
-    else:
-        return filename
+download_dir = Path(r"D:\CWF\merged")
 
 # file list derived from QGIS python console where code from DEM_list run in console
-file_list = open('C:/Users/TMillaKoch/repos/DEM/dem_links.txt', 'r').read().strip().split('\n')
+file_list = open(r"C:\Users\TMillaKoch\repos\QCFishPass\dem_links.txt", 'r').read().strip().split('\n')
 
 # Clean up the URLs - remove quotes, whitespace, commas, and any other formatting
 cleaned_file_list = []
@@ -41,6 +97,11 @@ for url in cleaned_file_list[:3]:
 file_list = cleaned_file_list
 file_list.sort()
 
+# Counters for summary
+downloaded = 0
+skipped = 0
+failed = 0
+
 # download all files in file list
 for i, url in enumerate(file_list):
     print(f"\n[{i+1}/{len(file_list)}] Processing: {url}")
@@ -51,14 +112,30 @@ for i, url in enumerate(file_list):
     # Combine the name and the downloads directory to get the local filename
     filename = os.path.join(download_dir, name)
     
+    # Check if file already exists
+    if os.path.isfile(filename):
+        print(f"⊘ Skipping {name} - already exists")
+        skipped += 1
+        continue
+    
     print(f"Downloading {name}")
     
     try:
-        urllib.request.urlretrieve(url, autorename(filename))
+        urllib.request.urlretrieve(url, filename)
         print(f"✓ Successfully downloaded {name}")
+        downloaded += 1
     except urllib.error.HTTPError as e:
         print(f"✗ HTTP Error {e.code}: {e.reason} for {url}")
+        failed += 1
     except Exception as e:
         print(f"✗ Error downloading {url}: {e}")
+        failed += 1
 
+print("\n" + "="*50)
+print("Download Summary:")
+print(f"  Downloaded: {downloaded}")
+print(f"  Skipped (already exists): {skipped}")
+print(f"  Failed: {failed}")
+print(f"  Total processed: {len(file_list)}")
+print("="*50)
 print("Done!")

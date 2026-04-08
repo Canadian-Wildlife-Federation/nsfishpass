@@ -19,6 +19,15 @@
 #
 # This script loads fish habitat information into the database
 #
+# DESCRIPTION
+# 
+# This Python script loads fish habitat/observation data into. There are four main steps to this script.
+# 1.	Reads settings from the config file (via appconfig) including database connection details, target schema, and the source data file path.
+# 2.	Drops any existing habitat data table.
+# 3.	Uses OGR via subprocess to load the "habitat" layer from the source file into PostgreSQL. 
+# 4.	Converts the stream_id column from text to UUID format to match the structure of the related stream table.
+# 
+# 
 import subprocess
 import appconfig
 

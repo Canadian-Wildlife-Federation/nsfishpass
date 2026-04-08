@@ -14,6 +14,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# DESCRIPTION
+# 
+# This script loads barrier data (dams and waterfalls) from the CABD API into a local database and sets up the infrastructure for tracking barrier passability by fish species.  The script is split into six main steps.
+# 1.	Set up database tables: 
+# -	Fish species table: Stores information about target fish species including their codes, common names, and local names
+# -	Barriers table: Main table holding both dams and waterfalls, along with attributes like location, name, type, ownership, stream information, etc.
+# -	Waterfalls table: Separate table specifically for waterfalls (redundant with barriers table but kept for future reorganization)
+# -	Passability table: Tracks whether each barrier is passable for each fish species (so if there are 3 species and 10 barriers, this table will have 30 records)
+# 2.	Retrieve data from CABD API: 
+# -	Queries the CABD API for dams in the watershed (filtered by NHN watershed ID)
+# -	Extracts dam attributes: ID, location coordinates, name, owner, use type, passability status
+# -	Queries the CABD API for waterfalls in the watershed
+# -	Extracts waterfall attributes: ID, location, name, height, passability status
+# -	Inserts dams into the barriers table
+# -	Inserts waterfalls into both the barriers table and the separate waterfalls table
+# 3.	Snap barriers to the stream network: 
+# -	Creates a function that snaps point features to the nearest stream line within a specified distance
+# -	Applies this to both barriers and waterfalls, creating "snapped_point" locations that lie exactly on the stream network
+# -	Removes any barriers that couldn't be snapped (likely outside the actual study area despite matching the watershed ID filter)
+# 4.	Assign secondary watershed names: 
+# -	If secondary watersheds are defined (like for CMM which has 3 sub-watersheds), assigns the appropriate name based on spatial location
+# -	Otherwise, uses the primary watershed name as the default
+# 5.	Calculate species-specific passability: 
+# -	For each barrier and each fish species combination: 
+#   -	Dams: Uses the passability status from CABD directly (usually "BARRIER" or "PASSABLE")
+#   -	Waterfalls: Compares the waterfall height against species-specific height thresholds stored in the fish_species table 
+#   -	If waterfall height ≥ threshold: marked as "BARRIER
+#   -	If waterfall height < threshold: marked as "PASSABLE
+#   -	If height is unknown: assumed "PASSABLE" 
+#   -	Converts text passability values to numbers: "BARRIER" = 0, "PARTIAL BARRIER" = 0.5, "PASSABLE" = 1, "UNKNOWN" = 0
+#   -	Adds species codes to the passability table for easy reference
+# 6.	Clean up: 
+# -	Removes the passability_status column from the barriers table since that information now lives in the dedicated passability table (which handles species-specific differences)
+
+
+
 #----------------------------------------------------------------------------------
 
 """
@@ -336,7 +372,7 @@ def main():
 
         # snaps barrier features to network
         query = f"""
-            CREATE OR REPLACE FUNCTION public.snap_to_network(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
+            CREATE OR REPLACE FUNCTION public.test_snap(src_schema varchar, src_table varchar, raw_geom varchar, snapped_geom varchar, max_distance_m double precision) RETURNS VOID AS $$
             DECLARE    
               pnt_rec RECORD;
               fp_rec RECORD;
@@ -351,11 +387,11 @@ def main():
                 END LOOP;
             END;
             $$ LANGUAGE plpgsql;
-            ALTER FUNCTION public.snap_to_network
+            ALTER FUNCTION public.test_snap
             OWNER TO cwf_analyst;
 
          
-            SELECT public.snap_to_network('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
+            SELECT public.test_snap('{dbTargetSchema}', '{dbBarrierTable}', 'original_point', 'snapped_point', '{snapDistance}');
 
             --remove any dam features not snapped to streams
             --because using nhn_watershed_id can cover multiple watersheds
@@ -369,7 +405,7 @@ def main():
 
         # snap waterfalls in waterfalls table and remove unsnapped features
         query = f"""
-            SELECT public.snap_to_network('{dbTargetSchema}', '{dbWaterfallTable}', 'original_point', 'snapped_point', '{snapDistance}');
+            SELECT public.test_snap('{dbTargetSchema}', '{dbWaterfallTable}', 'original_point', 'snapped_point', '{snapDistance}');
 
             DELETE FROM {dbTargetSchema}.{dbWaterfallTable}
             WHERE snapped_point IS NULL;

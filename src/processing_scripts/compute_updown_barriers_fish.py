@@ -17,7 +17,50 @@
 #----------------------------------------------------------------------------------
 
 #
-# this script computes upstream/downstream barrier counts and ids
+# This script calculates how many barriers exist upstream and downstream of each stream segment in the network, tracking this information separately for each fish species. The result from this script is a streams table updated with species-specific barrier counts and IDs for every segment. There are 6 main steps to how this script operates.
+# 
+# DESCRIPTION
+# 
+# 1.	Build a network graph structure: 
+# -	Reads all stream segments from the database
+# -	Creates nodes and edges forming a connected network
+# -	Each edge stores its geometry, database ID, and sets to hold barrier information
+# -	Each node can have multiple incoming edges (tributaries) and outgoing edges (downstream connections)
+# 2.	Add barriers to the network: 
+# -	Queries for regular barriers (dams, assessed crossings) that are impassable for the current species
+# -	Identifies whether each barrier sits at the upstream end (start point) or downstream end (end point) of a stream segment
+# -	Stores barrier IDs in the appropriate nodes
+# -	Separately queries for gradient barriers (steep sections, waterfalls) using the same logic
+# -	Only considers barriers where passability_status != 1 (not quite passable) for the specific fish species
+# 3.	Traverse downstream (headwaters to outlet): 
+# -	Uses a queue-based algorithm starting from headwater nodes (those with no incoming edges)
+# -	For each node, waits until all upstream edges have been visited to maintain order
+# -	Collects all barriers found upstream by: 
+#   -	Combining barriers from all incoming tributary edges
+#   -	Adding any barriers located at this node itself
+# -	Propagates this cumulative set of upstream barriers to all outgoing (downstream) edges
+# -	Continues until all edges know their complete set of upstream barriers
+# 4.	Traverse upstream (outlet to headwaters): 
+# -	Uses a queue-based algorithm starting from outlet nodes (those with no outgoing edges)
+# -	For each node, waits until all downstream edges have been visited
+# -	Collects all barriers found downstream by: 
+#   -	Combining barriers from all outgoing edges
+#   -	Adding any barriers located at this node itself
+# -	Propagates this cumulative set of downstream barriers to all incoming (upstream) edges
+# -	Continues until all edges know their complete set of downstream barriers
+# 5.	Write results back to database: 
+# -	For each stream segment, updates columns with: 
+#   -	Count of upstream barriers for this species
+#   -	Count of downstream barriers for this species
+#   -	Array of upstream barrier IDs
+#   -	Array of downstream barrier IDs
+#   -	Count of upstream gradient barriers
+#   -	Count of downstream gradient barriers
+# 6.	Repeat for all species: 
+# -	Clears the network and rebuilds it for each fish species
+# -	This is necessary because the same physical barrier might be passable for one species but impassable for another
+# -	Creates separate columns for each species (for example: barrier_up_as_cnt for Atlantic Salmon)
+
 #
 import appconfig
 import shapely.wkb

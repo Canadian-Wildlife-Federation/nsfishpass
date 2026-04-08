@@ -23,7 +23,17 @@
 #
 # In addition to computing vertex and segment gradient it also computes the
 # maximum vertex gradient for the stream segment
-#
+# 
+#DESCRIPTION
+# 
+# This script calculates the overall gradient for entire stream segments. It determines the average steepness of each complete stream segment by comparing its starting and ending elevations. The script operates in two main steps.
+# 1.	Add a gradient column: Creates a new field in the stream table to store the calculated gradient values (if it doesn't already exist).
+# 2.	Calculates segment gradient: For each stream segment, it: 
+#       1.	Takes the elevation at the first point (downstream end)
+#       2.	Takes the elevation at the last point (upstream end)
+#       3.	Calculates the elevation difference
+#       4.	Divides by the total length of the segment to get the gradient
+# 
 import appconfig
 
 iniSection = appconfig.args.args[0]

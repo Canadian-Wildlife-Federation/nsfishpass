@@ -19,7 +19,24 @@
 #
 # This script uses dem data to assign elevation values to
 # linear geometries use bilinear interpolation of dem values
-#
+# 
+#DESCRIPTION
+# 
+# This script assigns elevation values to stream network lines by extracting elevation data from DEMs using bilinear interpolation. In essence, the vertices of each stream segment will be assigned an elevation, converting them from 2D geometring to 3D geometries (linestringZ). The script converts 2D stream geometries (Linestring) into 3D geometries (LineStringZ).
+# The script works in five steps: Initialization, DEM indexing, DEM Processing, elevation calculations, and DEM edge case handling.
+# 1. Initialization 
+# The script will read watershed IDs from the confog.ini file to determine what watershed to process. Then, a new 3D geometry column is created and populated with NODATA for now. 
+# 2. DEM File Indexing (indexDem function)
+# The script will scan the DEM directory for all elevation files and extract metadata from the files including: geographic bounds, cell/pixel dimensions, coordinate systems, and NoDATA values if they exist.
+# 3. Processing Workflow (processArea function)
+# The script will then make cartesian products from the intersection between the DEM extents and the stream segments from the defined database in the config.ini file. If the coordinate systems are different, then the script will transform the stream geometries to match that system of the DEM whose bounds it falls within. 
+# 4. Elevation Calculation (processCoordinate function)
+# This is the core algorithm that uses bilinear interpolation: For each point (vertex) on a stream segment, the script will identify the four surrounding DEM cells and take their elevations. The interpolated elevation is then calculated for both x and y axes by interpolating along the x and y axes sequentially based on the how close the original point is to the corners of the cells. Based on these weights, the (x,y) coordinate is then given an elevation value (i.e., now a (x,y,z) coordinate).
+# 5. Handling Edge Cases
+# The script will then check for any points falling outside the geographic bounds of the DEMs. If there are no overlapping DEMs found within the original DEM directory, the the elevation value remains NoDATA.
+# The overall result is a stream network table where each LineString geometry now has accurate elevation values at every vertex.
+# 
+# 
 import subprocess
 import appconfig
 import os
@@ -112,104 +129,34 @@ def prepareOutput(conn):
     conn.commit()
     
 
-def indexDem():
-    #read all files in dem
-    #get bounds
-    #build index of 
-    print("indexing dem files")
-    demfiles = []
-    for demfile in os.listdir(demDir):
-        if (demfile.endswith('.tif') or demfile.endswith('.tiff')):
-            demfiles.append(getFileDetails(os.path.join(demDir,demfile)))
-            
-    return demfiles
-  
-def getFileDetails(demfile):
-    print("    reading: " + demfile)
-    
-    
-    out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + demfile + "\"", capture_output=True)
-    srid = out.stdout.decode('utf-8').split(':')[1].strip()
-    
-    out = subprocess.run("\"" + appconfig.gdalinfo + "\" -json " + "\"" + demfile + "\"", capture_output=True)
-
-    jsonout = out.stdout.decode('utf-8')
-    
-    metadata = json.loads(jsonout)
-    
-    xmin = metadata['cornerCoordinates']['lowerLeft'][0]
-    ymin = metadata['cornerCoordinates']['lowerLeft'][1]
-    
-    xmax = metadata['cornerCoordinates']['upperRight'][0]
-    ymax = metadata['cornerCoordinates']['upperRight'][1]
-    
-    xcnt = metadata['size'][0]
-    ycnt = metadata['size'][1]
-    
-    xsize = (xmax - xmin) / xcnt
-    ysize = (ymax - ymin) / ycnt 
-    
-    nodata = metadata['bands'][0]['noDataValue']
-
-    #USE IF ERROR UNDEFINED SRID APPEARS (CHECK IF SRID:-1)
-    #print(f'xmin: {xmin}\n ymin:{ymin}\n xmax:{xmax}\n ymax:{ymax}\n xsize:{xsize}\n ysize:{ysize}\n xcnt:{xcnt}\n ycnt:{ycnt}\n srid:{srid}\n nodata:{nodata}')
-
-    return DEMFile(demfile, xmin, ymin, xmax,ymax, xsize, ysize, xcnt, ycnt, srid, nodata)
-#-- BELOW CODE IS FOR WHEN SRID HANDLING IS NEEDED - COMMENTED OUT FOR NOW
-#-- CODE BELOW IS FOR WHEN SRID = -1, THEREFORE UNDEFINED, AND THE COMMENTED OUT FUNCTIONS ASSIGN A DEFAULT SRID OR GUESS BASED ON THE DEM EXTENT
-#-- COMMENT ABOVE FUNCTIONS WITH MATCHING NAMES
-# def indexDem(default_srid=None, assign_crs=False):
-#     """
-#     Index DEM files with CRS handling.
-    
-#     Args:
-#         default_srid: Default SRID to use for files with undefined CRS
-#         assign_crs: If True, create new files with CRS assigned
-    
-#     Returns:
-#         List of DEMFile objects
-#     """
+# def indexDem():
+#     #read all files in dem
+#     #get bounds
+#     #build index of 
 #     print("indexing dem files")
 #     demfiles = []
-    
 #     for demfile in os.listdir(demDir):
 #         if (demfile.endswith('.tif') or demfile.endswith('.tiff')):
-#             filepath = os.path.join(demDir, demfile)
-            
-#             # Check if this file has undefined CRS and we want to assign one
-#             if assign_crs and default_srid:
-#                 out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + filepath + "\"", capture_output=True)
-#                 srid_output = out.stdout.decode('utf-8').strip()
-                
-#                 if ':' in srid_output and srid_output.split(':')[1].strip() == '-1':
-#                     # Create new file with CRS assigned
-#                     filepath = assign_crs_to_file(filepath, default_srid)
-            
-#             demfiles.append(getFileDetails(filepath, default_srid))
+#             demfiles.append(getFileDetails(os.path.join(demDir,demfile)))
             
 #     return demfiles
-
-# def getFileDetails(demfile, default_srid=None):
+  
+# def getFileDetails(demfile):
 #     print("    reading: " + demfile)
     
-#     # Try to get SRID from the file
-#     out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + demfile + "\"", capture_output=True)
-#     srid_output = out.stdout.decode('utf-8').strip()
     
-#     # Handle cases where SRID is undefined or -1
-#     if ':' in srid_output:
-#         srid = srid_output.split(':')[1].strip()
-#         if srid == '-1' or srid == '':
-#             srid = handle_undefined_srid(demfile, default_srid)
-#     else:
-#         srid = handle_undefined_srid(demfile, default_srid)
+#     out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + demfile + "\"", capture_output=True)
+#     srid = out.stdout.decode('utf-8').split(':')[1].strip()
     
 #     out = subprocess.run("\"" + appconfig.gdalinfo + "\" -json " + "\"" + demfile + "\"", capture_output=True)
+
 #     jsonout = out.stdout.decode('utf-8')
+    
 #     metadata = json.loads(jsonout)
     
 #     xmin = metadata['cornerCoordinates']['lowerLeft'][0]
 #     ymin = metadata['cornerCoordinates']['lowerLeft'][1]
+    
 #     xmax = metadata['cornerCoordinates']['upperRight'][0]
 #     ymax = metadata['cornerCoordinates']['upperRight'][1]
     
@@ -221,108 +168,178 @@ def getFileDetails(demfile):
     
 #     nodata = metadata['bands'][0]['noDataValue']
 
-#     #print(f'xmin: {xmin}\n ymin:{ymin}\n xmax:{xmax}\n ymax:{ymax}\n xsize:{xsize}\n ysize:{ysize}\n xcnt:{xcnt}\n ycnt:{ycnt}\n srid:{srid}\n nodata:{nodata}')
+#     #USE IF ERROR UNDEFINED SRID APPEARS (CHECK IF SRID:-1)
+#     print(f'xmin: {xmin}\n ymin:{ymin}\n xmax:{xmax}\n ymax:{ymax}\n xsize:{xsize}\n ysize:{ysize}\n xcnt:{xcnt}\n ycnt:{ycnt}\n srid:{srid}\n nodata:{nodata}')
 
-#     return DEMFile(demfile, xmin, ymin, xmax, ymax, xsize, ysize, xcnt, ycnt, int(srid), nodata)
+#     return DEMFile(demfile, xmin, ymin, xmax,ymax, xsize, ysize, xcnt, ycnt, srid, nodata)
+#-- BELOW CODE IS FOR WHEN SRID HANDLING IS NEEDED - COMMENTED OUT FOR NOW
+#-- CODE BELOW IS FOR WHEN SRID = -1, THEREFORE UNDEFINED, AND THE COMMENTED OUT FUNCTIONS ASSIGN A DEFAULT SRID OR GUESS BASED ON THE DEM EXTENT
+#-- COMMENT ABOVE FUNCTIONS WITH MATCHING NAMES
+def indexDem(default_srid=None, assign_crs=False):
+    """
+    Index DEM files with CRS handling.
+    
+    Args:
+        default_srid: Default SRID to use for files with undefined CRS
+        assign_crs: If True, create new files with CRS assigned
+    
+    Returns:
+        List of DEMFile objects
+    """
+    print("indexing dem files")
+    demfiles = []
+    
+    for demfile in os.listdir(demDir):
+        if (demfile.endswith('.tif') or demfile.endswith('.tiff')):
+            filepath = os.path.join(demDir, demfile)
+            
+            # Check if this file has undefined CRS and we want to assign one
+            if assign_crs and default_srid:
+                out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + filepath + "\"", capture_output=True)
+                srid_output = out.stdout.decode('utf-8').strip()
+                
+                if ':' in srid_output and srid_output.split(':')[1].strip() == '-1':
+                    # Create new file with CRS assigned
+                    filepath = assign_crs_to_file(filepath, default_srid)
+            
+            demfiles.append(getFileDetails(filepath, default_srid))
+            
+    return demfiles
 
-# # Handle undefined SRID by guessing or using default (to be commented out if not needed)
-# def handle_undefined_srid(demfile, default_srid=None):
-#     """
-#     Handle DEM files with undefined SRID by guessing or using default.
+def getFileDetails(demfile, default_srid=None):
+    print("    reading: " + demfile)
     
-#     Args:
-#         demfile: Path to the DEM file
-#         default_srid: Default SRID to use if provided
+    # Try to get SRID from the file
+    out = subprocess.run("\"" + appconfig.gdalsrsinfo + "\" -e -o epsg " + "\"" + demfile + "\"", capture_output=True)
+    srid_output = out.stdout.decode('utf-8').strip()
     
-#     Returns:
-#         SRID as string
-#     """
-#     print(f"    Warning: {os.path.basename(demfile)} has undefined CRS (SRID=-1)")
+    # Handle cases where SRID is undefined or -1
+    if ':' in srid_output:
+        srid = srid_output.split(':')[1].strip()
+        if srid == '-1' or srid == '':
+            srid = handle_undefined_srid(demfile, default_srid)
+    else:
+        srid = handle_undefined_srid(demfile, default_srid)
     
-#     if default_srid:
-#         print(f"    Using provided default SRID: {default_srid}")
-#         return str(default_srid)
+    out = subprocess.run("\"" + appconfig.gdalinfo + "\" -json " + "\"" + demfile + "\"", capture_output=True)
+    jsonout = out.stdout.decode('utf-8')
+    metadata = json.loads(jsonout)
     
-#     # Try to guess based on coordinate bounds
-#     out = subprocess.run("\"" + appconfig.gdalinfo + "\" -json " + "\"" + demfile + "\"", capture_output=True)
-#     jsonout = out.stdout.decode('utf-8')
-#     metadata = json.loads(jsonout)
+    xmin = metadata['cornerCoordinates']['lowerLeft'][0]
+    ymin = metadata['cornerCoordinates']['lowerLeft'][1]
+    xmax = metadata['cornerCoordinates']['upperRight'][0]
+    ymax = metadata['cornerCoordinates']['upperRight'][1]
     
-#     xmin = metadata['cornerCoordinates']['lowerLeft'][0]
-#     ymin = metadata['cornerCoordinates']['lowerLeft'][1]
-#     xmax = metadata['cornerCoordinates']['upperRight'][0]
-#     ymax = metadata['cornerCoordinates']['upperRight'][1]
+    xcnt = metadata['size'][0]
+    ycnt = metadata['size'][1]
     
-#     # Guess CRS based on coordinate ranges
-#     guessed_srid = guess_srid_from_bounds(xmin, ymin, xmax, ymax)
-#     #print(f"    Guessed SRID based on bounds: {guessed_srid}")
+    xsize = (xmax - xmin) / xcnt
+    ysize = (ymax - ymin) / ycnt 
     
-#     return str(guessed_srid)
+    nodata = metadata['bands'][0]['noDataValue']
+
+    #print(f'xmin: {xmin}\n ymin:{ymin}\n xmax:{xmax}\n ymax:{ymax}\n xsize:{xsize}\n ysize:{ysize}\n xcnt:{xcnt}\n ycnt:{ycnt}\n srid:{srid}\n nodata:{nodata}')
+
+    return DEMFile(demfile, xmin, ymin, xmax, ymax, xsize, ysize, xcnt, ycnt, int(srid), nodata)
+
+# Handle undefined SRID by guessing or using default (to be commented out if not needed)
+def handle_undefined_srid(demfile, default_srid=None):
+    """
+    Handle DEM files with undefined SRID by guessing or using default.
+    
+    Args:
+        demfile: Path to the DEM file
+        default_srid: Default SRID to use if provided
+    
+    Returns:
+        SRID as string
+    """
+    print(f"    Warning: {os.path.basename(demfile)} has undefined CRS (SRID=-1)")
+    
+    if default_srid:
+        print(f"    Using provided default SRID: {default_srid}")
+        return str(default_srid)
+    
+    # Try to guess based on coordinate bounds
+    out = subprocess.run("\"" + appconfig.gdalinfo + "\" -json " + "\"" + demfile + "\"", capture_output=True)
+    jsonout = out.stdout.decode('utf-8')
+    metadata = json.loads(jsonout)
+    
+    xmin = metadata['cornerCoordinates']['lowerLeft'][0]
+    ymin = metadata['cornerCoordinates']['lowerLeft'][1]
+    xmax = metadata['cornerCoordinates']['upperRight'][0]
+    ymax = metadata['cornerCoordinates']['upperRight'][1]
+    
+    # Guess CRS based on coordinate ranges
+    guessed_srid = guess_srid_from_bounds(xmin, ymin, xmax, ymax)
+    #print(f"    Guessed SRID based on bounds: {guessed_srid}")
+    
+    return str(guessed_srid)
 
 
-# def guess_srid_from_bounds(xmin, ymin, xmax, ymax):
-#     """
-#     Guess the most likely SRID based on coordinate bounds.
+def guess_srid_from_bounds(xmin, ymin, xmax, ymax):
+    """
+    Guess the most likely SRID based on coordinate bounds.
     
-#     Returns:
-#         Integer SRID
-#     """
-#     # Check if coordinates are in typical lat/lon ranges
-#     if (-180 <= xmin <= 180 and -180 <= xmax <= 180 and 
-#         -90 <= ymin <= 90 and -90 <= ymax <= 90):
-#         return 4326  # WGS84
+    Returns:
+        Integer SRID
+    """
+    # Check if coordinates are in typical lat/lon ranges
+    if (-180 <= xmin <= 180 and -180 <= xmax <= 180 and 
+        -90 <= ymin <= 90 and -90 <= ymax <= 90):
+        return 4326  # WGS84
     
-#     # Check for Canadian coordinate systems (common for Canadian Wildlife Federation)
-#     # NAD83 UTM zones for Canada
-#     if (200000 <= xmin <= 800000 and 5000000 <= ymin <= 7000000):
-#         # Likely UTM - guess zone based on longitude if we had it
-#         # For now, return a common Canadian projection
-#         return 3978  # NAD83 Canada Atlas Lambert
+    # Check for Canadian coordinate systems (common for Canadian Wildlife Federation)
+    # NAD83 UTM zones for Canada
+    if (200000 <= xmin <= 800000 and 5000000 <= ymin <= 7000000):
+        # Likely UTM - guess zone based on longitude if we had it
+        # For now, return a common Canadian projection
+        return 3978  # NAD83 Canada Atlas Lambert
     
-#     # Check for other UTM-like coordinates
-#     elif (abs(xmin) > 100000 and abs(xmax) > 100000):
-#         #print(f"    Coordinates appear projected but unknown system: ({xmin}, {ymin})")
-#         return 3857  # Web Mercator as fallback
+    # Check for other UTM-like coordinates
+    elif (abs(xmin) > 100000 and abs(xmax) > 100000):
+        #print(f"    Coordinates appear projected but unknown system: ({xmin}, {ymin})")
+        return 3857  # Web Mercator as fallback
     
-#     else:
-#         #print(f"    Cannot determine CRS from bounds: ({xmin}, {ymin}, {xmax}, {ymax})")
-#         return 4326  # WGS84 as ultimate fallback
+    else:
+        #print(f"    Cannot determine CRS from bounds: ({xmin}, {ymin}, {xmax}, {ymax})")
+        return 4326  # WGS84 as ultimate fallback
 
-# def assign_crs_to_file(input_file, srid, output_file=None):
-#     """
-#     Create a new DEM file with the specified CRS assigned.
+def assign_crs_to_file(input_file, srid, output_file=None):
+    """
+    Create a new DEM file with the specified CRS assigned.
     
-#     Args:
-#         input_file: Path to input DEM file
-#         srid: SRID to assign
-#         output_file: Output file path (optional, will add '_crs' suffix if not provided)
+    Args:
+        input_file: Path to input DEM file
+        srid: SRID to assign
+        output_file: Output file path (optional, will add '_crs' suffix if not provided)
     
-#     Returns:
-#         Path to the new file with CRS assigned
-#     """
-#     if not output_file:
-#         base, ext = os.path.splitext(input_file)
-#         output_file = f"{base}_crs{ext}"
+    Returns:
+        Path to the new file with CRS assigned
+    """
+    if not output_file:
+        base, ext = os.path.splitext(input_file)
+        output_file = f"{base}_crs{ext}"
     
-#     # Use gdal_translate to assign CRS
-#     cmd = [
-#         appconfig.gdal_translate if hasattr(appconfig, 'gdal_translate') else 'gdal_translate',
-#         '-a_srs', f'EPSG:{srid}',
-#         input_file,
-#         output_file
-#     ]
+    # Use gdal_translate to assign CRS
+    cmd = [
+        appconfig.gdal_translate if hasattr(appconfig, 'gdal_translate') else 'gdal_translate',
+        '-a_srs', f'EPSG:{srid}',
+        input_file,
+        output_file
+    ]
     
-#     try:
-#         result = subprocess.run(cmd, capture_output=True, text=True)
-#         if result.returncode == 0:
-#             print(f"    Created {output_file} with SRID {srid}")
-#             return output_file
-#         else:
-#             print(f"    Error assigning CRS: {result.stderr}")
-#             return input_file
-#     except Exception as e:
-#         print(f"    Error running gdal_translate: {e}")
-#         return input_file
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"    Created {output_file} with SRID {srid}")
+            return output_file
+        else:
+            print(f"    Error assigning CRS: {result.stderr}")
+            return input_file
+    except Exception as e:
+        print(f"    Error running gdal_translate: {e}")
+        return input_file
     
 def processArea(demfile, connection, watershed_id, onlymissing = False):
     print("    processing: " + (demfile.filename))
@@ -521,7 +538,43 @@ def findElevation(x, y):
     return appconfig.NODATA    
 
 #--- main program ---
-def main(demfiles):
+# def main(demfiles):
+    
+#     with appconfig.connectdb() as conn:
+        
+#         prepareOutput(conn)
+        
+#         watershed_id = getWatershedIds(conn)
+    
+#         #demfiles = indexDem()
+        
+#         #process each dem file
+#         print("Computing Elevations")
+#         for demfile in demfiles:
+#             processArea(demfile, conn, watershed_id)
+    
+#         #search for any missing coordinates that may require 
+#         #multiple dem files to compute
+#         #if we have one giant dem file then ignore this
+#         if (len(demfiles) > 1):
+#             print ("  computing overlap areas")
+#             for demfile in demfiles:
+#                 print(demfile.filename)
+#                 processArea(demfile, conn, watershed_id, True)
+                
+
+    print("done")
+
+##--MAIN PROGRAM FOR WHEN SRID HANDLING IS NEEDED
+def main(demfiles=None, default_srid=None, assign_crs=False):
+    """
+    Main function with CRS handling options.
+    
+    Args:
+        demfiles: Pre-loaded DEM files (optional)
+        default_srid: Default SRID for undefined CRS files
+        assign_crs: Whether to create new files with CRS assigned
+    """
     
     with appconfig.connectdb() as conn:
         
@@ -529,7 +582,9 @@ def main(demfiles):
         
         watershed_id = getWatershedIds(conn)
     
-        #demfiles = indexDem()
+        # Index DEM files if not provided
+        if demfiles is None:
+            demfiles = indexDem(default_srid, assign_crs)
         
         #process each dem file
         print("Computing Elevations")
@@ -547,44 +602,6 @@ def main(demfiles):
                 
 
     print("done")
-
-##--MAIN PROGRAM FOR WHEN SRID HANDLING IS NEEDED
-# def main(demfiles=None, default_srid=None, assign_crs=False):
-#     """
-#     Main function with CRS handling options.
-    
-#     Args:
-#         demfiles: Pre-loaded DEM files (optional)
-#         default_srid: Default SRID for undefined CRS files
-#         assign_crs: Whether to create new files with CRS assigned
-#     """
-    
-#     with appconfig.connectdb() as conn:
-        
-#         prepareOutput(conn)
-        
-#         watershed_id = getWatershedIds(conn)
-    
-#         # Index DEM files if not provided
-#         if demfiles is None:
-#             demfiles = indexDem(default_srid, assign_crs)
-        
-#         #process each dem file
-#         print("Computing Elevations")
-#         for demfile in demfiles:
-#             processArea(demfile, conn, watershed_id)
-    
-#         #search for any missing coordinates that may require 
-#         #multiple dem files to compute
-#         #if we have one giant dem file then ignore this
-#         if (len(demfiles) > 1):
-#             print ("  computing overlap areas")
-#             for demfile in demfiles:
-#                 print(demfile.filename)
-#                 processArea(demfile, conn, watershed_id, True)
-                
-
-#     print("done")
 
 if __name__ == "__main__":
     main()     

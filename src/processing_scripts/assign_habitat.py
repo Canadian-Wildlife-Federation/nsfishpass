@@ -16,9 +16,18 @@
 #
 #----------------------------------------------------------------------------------
 
-#
-# This script computes the habitat models for the
-# various fish species 
+# DESCRIPTION
+# 
+# This script computes the habitat models for the assigned fish species (usually marked in a fish species .csv in the /data folder). 
+# For example, fish species codes for the East Coast will be ‘as’ for Atlantic Salmon and ‘ae’ for American Eel. 
+# The main function within the script is called computeHabitatModel(). 
+# The function will determine whether a segment of a stream network will be spawning, and/or rearing, and/or combined habitat. 
+# The species codes will have associated attributes to whether habitat is accessible or potential for them. 
+# For example, ‘as’ will have a maximum stream gradient where anything upstream will be considered inaccessible habitat. 
+# Stream order number can affect species’ habitat, such as the ‘ae’ where they require a stream order >= 2 in order for habitat to be accessible. 
+# There would be separate rearing and spawning gradient values for species which would determine whether or not habitat is accessible and rearing or accessible and spawning.
+# Outputs are all submitted to a postGIS database where, in this case, stream segments are taken and labelled as habitat or not.
+ 
 #
 
 import appconfig

@@ -23,7 +23,14 @@
 #
 # In addition to computing vertex and segment gradient it also computes the
 # maximum vertex gradient for the stream segment
-#
+# 
+#DESCRIPTION
+# This Python script calculates stream gradients for a river network using DEM data. The resulting table contains gradient information for vertices (points) along the stream network, including elevations, calculated gradients, and gradient classifications. The script works in four main steps.
+# 1.	Prepare the geometry: Takes 3D stream data (x, y, and z values) and adds distance measurements along each stream segment, creating a 4D geometry (x, y, z, and distance).
+# 2.	Calculate vertex gradients: For each point along the stream segments, it measures the elevation change over a 100-meter distance upstream. This gives the gradient at that location. Additionally, it also computes the maximum vertex gradient for each 100-meter section.
+# 3.	Classify gradients: Groups each gradient into categories based on steepness—for example, slopes between 5-7%, 7-10%, 10-12%, and so on. Once the gradients reach >30%, they are assigned different grade classes.
+# 4.	Clean up: Removes any invalid elevation data (like -999999, which appears to be a placeholder for missing values) and stores the results in a new table.
+# 
 import appconfig
 
 iniSection = appconfig.args.args[0]

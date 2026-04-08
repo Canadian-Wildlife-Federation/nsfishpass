@@ -18,7 +18,39 @@
 
 #
 # Smooths raw elevation values to ensure hydro network flows downhill
-#
+# 
+# DESCRIPTION
+# 
+#This Python script smooths elevation values along a stream network to ensure water flows consistently downhill, correcting any anomalies in the raw elevation data. The script will update the streams table with a single gradient value for each complete stream segment. The output of the script is a new geometry column containing smoothed 3D stream segments where elevations decrease consistently from upstream to downstream, eliminating any artificial "uphill" sections that would be physically impossible. There are four main steps to how this script operates.
+# 1.	Build a network structure: 
+# -	Reads all stream segments from the database
+# -	Creates a graph structure with nodes (junction points where streams meet) and edges (stream segments connecting nodes)
+# -	Each node stores its x, y, and z coordinates
+# -	Each edge stores its geometry and connects two nodes
+# 2.	Process nodes in two passes: 
+# -	Upstream pass (walking up the network): 
+#   -	Starts at outlet points (nodes with no downstream connections)
+#   -	Works upstream, visiting each node
+#   -	Calculates a "maximum elevation" value for each node by looking at all downstream elevations
+#   -	Ensures no node is higher than anything downstream from it
+# -	Downstream pass (walking down the network): 
+#   -	Starts at headwater points (nodes with no upstream connections)
+#   -	Works downstream, visiting each node
+#   -	Calculates a "minimum elevation" value for each node by looking at all upstream elevations
+#   -	Ensures no node is lower than anything upstream from it
+# -	Final node elevation: 
+#   -	Averages the min and max values to get a smoothed elevation for each node
+#   -	This balances upstream and downstream constraints
+# 3.	Process edges (stream segments): 
+# -	For each stream segment, smooths the elevation profile between its start and end nodes
+# -	Uses a bidirectional approach: 
+#   -	From downstream: ensures each point isn't lower than points downstream
+#   -	From upstream: ensures each point isn't higher than points upstream
+# -	Averages these constraints to create a smooth, monotonically decreasing elevation profile along each stream
+# 4.	Write results back to database: 
+# -	Updates the database with new smoothed geometries
+# -	Creates spatial indexes for efficient querying
+
 import appconfig
 import shapely.wkb
 import shapely.geometry

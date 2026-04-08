@@ -1,23 +1,146 @@
-#this script is to be run in the QGIS python console
-#see README for further instruction
+# # this script is to be run in the QGIS python console
+# # see README for further instruction
 import re
 
 layer = iface.activeLayer()  # Make sure your polygon layer is selected
 links = []
 
 for feature in layer.getFeatures():
-    description = feature['description']
+    description = feature['Ftp_dtm']
     if description:
         # Find the first <a href = "..."> link (note the spaces around =)
-        match = re.search(r'<a\s+href\s*=\s*["\']([^"\']+)["\']', description, re.IGNORECASE)
+        match = re.search(r'((?:https?|ftp)://[^\s<>"]+\.tif)', str(description), re.IGNORECASE)
         if match:
             url = match.group(1)
             links.append(url)
 
 # Write to text file
-output_path = 'C:/Users/TMillaKoch/repos/DEM/dem_links.txt'  # Change this path
+output_path = 'C:/Users/TMillaKoch/repos/QCFishPass/dem_links.txt'  # Change this path
 with open(output_path, 'w') as f:
     for link in links:
         f.write(f"{link},\n")
 
 print(f"Extracted {len(links)} first links to {output_path}")
+
+# #this script is to be run in the QGIS python console
+# #see README for further instruction
+# import re
+# from qgis.core import QgsProject
+
+# # Get the active layer (tiles with Ftp_dtm links) THIS VERSION IS MORE ROBUST AND ONLY REQUIRES THE DATASETFOOTPRINT CANADAWIDE INSTEAD OF PROVINCE BY PROVINCE
+# tiles_layer = iface.activeLayer()  # Make sure your polygon layer is selected
+
+# # Get the test_multiple_nhn layer by name
+# nhn_layer = QgsProject.instance().mapLayersByName('nhn_workunit')[0]
+
+# # Create a dictionary to group links by nhn unit
+# nhn_groups = {}
+
+# for tile_feature in tiles_layer.getFeatures():
+#     ftp_dtm = tile_feature['Ftp_dtm']
+    
+#     if ftp_dtm:
+#         # Extract the URL
+#         if ftp_dtm.startswith('http://') or ftp_dtm.startswith('https://') or ftp_dtm.startswith('ftp://'):
+#             url = ftp_dtm
+#         else:
+#             match = re.search(r'<a\s+href\s*=\s*["\']([^"\']+)["\']', ftp_dtm, re.IGNORECASE)
+#             if match:
+#                 url = match.group(1)
+#             else:
+#                 continue
+        
+#         # Find which nhn polygon this tile intersects with
+#         tile_geom = tile_feature.geometry()
+        
+#         for nhn_feature in nhn_layer.getFeatures():
+#             nhn_geom = nhn_feature.geometry()
+            
+#             if tile_geom.intersects(nhn_geom):
+#                 nhn_id = nhn_feature['id']
+                
+#                 if nhn_id not in nhn_groups:
+#                     nhn_groups[nhn_id] = []
+                
+#                 nhn_groups[nhn_id].append(url)
+#                 break  # Stop after finding first intersection
+
+# # Write to text file with headers
+# output_path = 'C:/Users/TMillaKoch/repos/QCFishPass/dem_links.txt'
+# with open(output_path, 'w') as f:
+#     for nhn_id in sorted(nhn_groups.keys()):
+#         f.write(f"# {nhn_id}\n")  # Header for each unit
+#         for link in nhn_groups[nhn_id]:
+#             f.write(f"{link},\n")
+#         f.write("\n")  # Blank line between groups
+
+# total_links = sum(len(links) for links in nhn_groups.values())
+# print(f"Extracted {total_links} links grouped into {len(nhn_groups)} units to {output_path}")
+
+# Save as estimate_size.py and run in any Python IDE
+# import urllib.request
+# import random
+
+# def get_file_size(url):
+#     try:
+#         req = urllib.request.Request(url, method='HEAD')
+#         with urllib.request.urlopen(req, timeout=60) as response:
+#             size = response.headers.get('Content-Length')
+#             return int(size) if size else None
+#     except Exception as e:
+#         print(f"Error: {e}")
+#         return None
+
+# def format_size(bytes):
+#     if bytes is None:
+#         return "Unknown"
+#     for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
+#         if bytes < 1024.0:
+#             return f"{bytes:.2f} {unit}"
+#         bytes /= 1024.0
+
+# # Read all links from your generated file
+# input_path = 'C:/Users/TMillaKoch/Documents/ASF/dem_links.txt'
+# all_links = []
+
+# print("Reading links from file...")
+# with open(input_path, 'r') as f:
+#     for line in f:
+#         line = line.strip()
+#         if line and not line.startswith('#') and ',' in line:
+#             url = line.split(',')[0].strip()
+#             if url.startswith(('http://', 'https://', 'ftp://')):
+#                 all_links.append(url)
+
+# print(f"Found {len(all_links)} total links\n")
+
+# # Sample size - adjust this based on how accurate you want it
+# sample_size = min(50, len(all_links))  # Sample 50 files
+# sample = random.sample(all_links, sample_size)
+
+# print(f"Sampling {sample_size} random files to estimate total size...")
+# print("This should take 1-2 minutes...\n")
+
+# sample_total = 0
+# successful = 0
+
+# for i, url in enumerate(sample, 1):
+#     print(f"Checking {i}/{sample_size}...", end='\r')
+#     size = get_file_size(url)
+#     if size:
+#         sample_total += size
+#         successful += 1
+
+# print(f"\n\nResults:")
+# print(f"{'='*60}")
+# print(f"Successfully sampled: {successful}/{sample_size} files")
+
+# if successful > 0:
+#     avg_size = sample_total / successful
+#     estimated_total = avg_size * len(all_links)
+    
+#     print(f"Average file size: {format_size(avg_size)}")
+#     print(f"Estimated total for ALL {len(all_links)} files: {format_size(estimated_total)}")
+#     print(f"{'='*60}")
+# else:
+#     print("Could not estimate - all sample requests failed")

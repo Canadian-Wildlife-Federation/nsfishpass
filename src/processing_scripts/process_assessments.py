@@ -16,9 +16,31 @@
 #
 #----------------------------------------------------------------------------------
 #
-# Work in progress
-#
-#
+# DESCRIPTION
+# 
+# This script processes barrier assessment data (field surveys of stream) from an CSV file into a database view for analysis. THIS IS DEFINITELY A WORK IN PROGRESS.
+# Key Logic Flow:
+# 1.	Input File Preprocessing: 
+# -	Reads an Excel file with multi-level column headers (two header rows)
+# -	Flattens the headers by concatenating them with spaces (e.g., "Site Information" + "Barrier ID" becomes "site information barrier id")
+# -	Converts the processed data to CSV format for database loading
+# -	Returns 'None' if no assessment file is configured (allows script to skip gracefully)
+# 2.	Data Loading: 
+# -	Drops any existing raw data table to ensure a clean load
+# -	Uses OGR to import the CSV into a barrier_assessment_raw table
+# -	Key OGR flags: AUTODETECT_TYPE=YES (infers column data types), EMPTY_STRING_AS_NULL=YES (treats empty strings as NULL values for cleaner data)
+# 3.	View Creation (Core Query Logic): 
+# -	Builds a SQL view that renames columns from verbose field survey names to concise database-friendly names
+# -	Dynamic Species Passability Columns: Loops through configured species codes to create columns like passability_status_bt (bull trout), passability_status_wct (westslope cutthroat), etc. This allows the view to adapt to different species lists without code changes
+# -	Extracts key assessment fields: 
+#   -	Identification: barrier ID, crossing type, location (lat/long), stream/road names
+#   -	Rapid Assessment Indicators: outflow drop, water depth, backwatering, width changes (quick field checks for potential barriers)
+#   -	Physical Characteristics: culvert material, shape, bottom type, dimensions, slope
+#   -	Additional Data: embedment length, baffles, notes, reference links
+#   -	Species-Specific Passability: One column per species indicating passage status
+# 4.	Error Handling: If no assessment file exists in the config, the script exits gracefully rather than failing.
+# Use Case: This creates a standardized dataset from potentially messy field surveys, allowing analysts to query barrier passability for different species and identify high-priority restoration sites.
+# 
 
 import appconfig
 import subprocess

@@ -68,8 +68,7 @@ def getUpstreamDownstream(conn):
             SELECT a.id as stream_id, b.id as barrier_id
             FROM {dbTargetSchema}.{dbTargetStreamTable} a,
                 {dbTargetSchema}.{dbHabAccessUpdates} b
-            WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-                st_intersects(st_endpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
+            WHERE ST_DWithin(ST_endPoint(a.geometry), b.snapped_point, 10)
         )
         UPDATE {dbTargetSchema}.{dbHabAccessUpdates}
             SET stream_id_up = a.stream_id
@@ -84,8 +83,7 @@ def getUpstreamDownstream(conn):
             SELECT a.id as stream_id, b.id as barrier_id
             FROM {dbTargetSchema}.{dbTargetStreamTable} a,
                 {dbTargetSchema}.{dbHabAccessUpdates} b
-            WHERE a.geometry && st_buffer(b.snapped_point, 0.01) and
-                st_intersects(st_startpoint(a.geometry), st_buffer(b.snapped_point, 0.01))
+            WHERE ST_DWithin(ST_startPoint(a.geometry), b.snapped_point, 10)
         )
         UPDATE {dbTargetSchema}.{dbHabAccessUpdates}
             SET stream_id_down = a.stream_id
@@ -188,14 +186,14 @@ def processStreams(points, codes, conn):
     print("Processing updates to accessibility and habitat")
 
     for point in points:
-        species = point['species']
-        update_type = point['update_type']
+        species = point['species'].strip()
+        update_type = point['update_type'].strip()
         stream_id_up = point['stream_id_up']
         stream_id_down = point['stream_id_down']
         pair_id = point['pair_id']
         upstream = point['upstream']
         downstream = point['downstream']
-        habitat_type = point['habitat_type']
+        habitat_type = point['habitat_type'].strip()
         # comments = point['comments']
 
         if stream_id_up is None:
@@ -670,8 +668,8 @@ def simplifyHabitatAccess(codes, conn):
 
 def main():
 
-    if iniSection in ['cheticamp', 'stewiacke']: # We don't have habitat and accessibility updates in cheticamp and stewiacke
-        return
+    # if iniSection in ['stewiacke']: # Update once we have habitat or accessibility updates in Stewiacke
+    #     return
 
     with appconfig.connectdb() as conn:
 

@@ -45,16 +45,71 @@ snapDistance = appconfig.config['CABD_DATABASE']['snap_distance']
 
 def main():
 
-    # we only have habitat data for some WCRPs
-    if iniSection in ['cheticamp', 'stewiacke']: 
-        return
 
     with appconfig.connectdb() as conn:
 
-        query = f"""DROP TABLE IF EXISTS {dbTargetSchema}.{datatable};"""
+        # query = f"""DROP TABLE IF EXISTS {dbTargetSchema}.{datatable};"""
+        # with conn.cursor() as cursor:
+        #     cursor.execute(query)
+        # conn.commit()
+
+        query = f"""
+            CREATE TABLE IF NOT EXISTS {dbTargetSchema}.{datatable}
+            (
+                update_source character varying COLLATE pg_catalog."default",
+                update_date date,
+                update_type character varying COLLATE pg_catalog."default",
+                notes character varying COLLATE pg_catalog."default",
+                species character varying COLLATE pg_catalog."default",
+                pair_id integer,
+                upstream boolean,
+                downstream boolean,
+                habitat_type character varying COLLATE pg_catalog."default",
+                latitude double precision,
+                longitude double precision,
+                geometry geometry(Point,2961),
+                id uuid primary key,
+                snapped_point geometry(Point,2961),
+                stream_measure numeric,
+                stream_id_up uuid,
+                stream_id_down uuid
+            )
+
+            TABLESPACE pg_default;
+
+            ALTER TABLE IF EXISTS {dbTargetSchema}.{datatable}
+                OWNER to cwf_analyst;
+
+            REVOKE ALL ON TABLE {dbTargetSchema}.{datatable} FROM PUBLIC;
+
+            GRANT SELECT ON TABLE {dbTargetSchema}.{datatable} TO PUBLIC;
+
+            GRANT ALL ON TABLE {dbTargetSchema}.{datatable} TO andrewp;
+
+            GRANT ALL ON TABLE {dbTargetSchema}.{datatable} TO cwf_tech;
+
+            GRANT ALL ON TABLE {dbTargetSchema}.{datatable} TO cwf_analyst;
+            -- Index: habitat_access_updates_geometry_geom_idx
+
+            -- DROP INDEX IF EXISTS {dbTargetSchema}.{datatable}_geometry_geom_idx;
+
+            CREATE INDEX IF NOT EXISTS habitat_access_updates_geometry_geom_idx
+                ON {dbTargetSchema}.{datatable} USING gist
+                (geometry)
+                TABLESPACE pg_default;
+            -- Index: habitat_access_updates_snapped_point_idx
+
+            -- DROP INDEX IF EXISTS {dbTargetSchema}.{datatable}_snapped_point_idx;
+
+            CREATE INDEX IF NOT EXISTS habitat_access_updates_snapped_point_idx
+                ON {dbTargetSchema}.{datatable} USING gist
+                (snapped_point)
+                TABLESPACE pg_default;
+        """
+
         with conn.cursor() as cursor:
             cursor.execute(query)
-        conn.commit()
+        conn.commit()           
 
         # As with barrier updates, we can initially load habitat updates from an existing geopackage or from the existing data layer
         print("Loading habitat and accessibility updates")

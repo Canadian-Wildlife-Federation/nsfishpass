@@ -66,12 +66,14 @@ def build_views(conn):
     for i in range(len(specCodes)):
         code = specCodes[i]
         col = f"""
+        b.dci_{code},
+        b.barrier_cnt_downstr_{code},
         b.func_upstr_hab_{code},
         b.total_upstr_hab_{code},
-        b.func_upstr_hab_{code} * (1 - p{i}.passability_status::double precision) as discon_func_upstr_hab_{code},
-        b.total_upstr_hab_{code} * (1 - p{i}.passability_status::double precision) as discon_total_upstr_hab_{code},
-        b.func_upstr_hab_{code} * (p{i}.passability_status::double precision) as con_func_upstr_hab_{code},
-        b.total_upstr_hab_{code} * (p{i}.passability_status::double precision) as con_total_upstr_hab_{code},
+        b.w_func_upstr_hab_{code} * (1 - p{i}.passability_status::double precision) as discon_func_upstr_hab_{code},
+        b.w_total_upstr_hab_{code} * (1 - p{i}.passability_status::double precision) as discon_total_upstr_hab_{code},
+        b.w_func_upstr_hab_{code} * (p{i}.passability_status::double precision) as con_func_upstr_hab_{code},
+        b.w_total_upstr_hab_{code} * (p{i}.passability_status::double precision) as con_total_upstr_hab_{code},
         b.func_upstr_hab_spawn_{code},
         b.total_upstr_hab_spawn_{code},
         b.func_upstr_hab_spawn_{code} * (1 - p{i}.passability_status::double precision) as discon_func_upstr_hab_spawn_{code},

@@ -46,14 +46,8 @@ def createTable():
             watershed_id varchar,
             sec_wshed_name varchar,
             total_km double precision,
-            --connected_naturally_accessible_all_km double precision,
-            --disconnected_naturally_accessible_all_km double precision,
-            --connected_naturally_accessible_spawn_all_km double precision,
-            --connected_naturally_accessible_rear_all_km double precision,
-            --connected_naturally_accessible_habitat_all_km double precision,
-            --disconnected_naturally_accessible_habitat_all_km double precision,
-            total_spawn_all_km double precision,
-            total_rear_all_km double precision,
+            --total_spawn_all_km double precision,
+            --total_rear_all_km double precision,
             total_habitat_all_km double precision,
 
             primary key (watershed_id, sec_wshed_name)
@@ -61,6 +55,7 @@ def createTable():
 
         ALTER TABLE  {dbTargetSchema}_wcrp.{statTable} OWNER TO cwf_analyst;
         GRANT SELECT ON TABLE {dbTargetSchema}_wcrp.habitat_stats TO cwf_user;
+        GRANT SELECT ON TABLE {dbTargetSchema}_wcrp.habitat_stats TO pgfs_nsfishpass;
     """
     with appconfig.connectdb() as connection:
         with connection.cursor() as cursor:
@@ -74,10 +69,17 @@ def getSecSheds(wshed):
     """
     global sec_sheds
     sec_sheds = []
-    q_get_sec_sheds = f"""
-        SELECT DISTINCT sec_name 
-        FROM {wshed}.{wsStreamTable};
-    """
+    if iniSection == 'cmm':
+        q_get_sec_sheds = f"""
+            SELECT DISTINCT sec_name 
+            FROM {wshed}.{wsStreamTable}
+            WHERE sec_name ilike 'St. Croix%';
+        """
+    else:
+        q_get_sec_sheds = f"""
+            SELECT DISTINCT sec_name 
+            FROM {wshed}.{wsStreamTable};
+        """
 
     with appconfig.connectdb() as connection:
         with connection.cursor() as cursor:
@@ -216,14 +218,14 @@ def runStats():
                 col_query = f"""
                     {col_query}
                     ALTER TABLE {dbTargetSchema}_wcrp.{statTable}
-                    ADD COLUMN IF NOT EXISTS {fish}_connected_naturally_accessible_spawn_km double precision,
-                    ADD COLUMN IF NOT EXISTS {fish}_disconnected_naturally_accessible_spawn_km double precision,
-                    ADD COLUMN IF NOT EXISTS {fish}_connected_naturally_accessible_rear_km double precision,
-                    ADD COLUMN IF NOT EXISTS {fish}_disconnected_naturally_accessible_rear_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_connected_naturally_accessible_spawn_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_disconnected_naturally_accessible_spawn_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_connected_naturally_accessible_rear_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_disconnected_naturally_accessible_rear_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_connected_naturally_accessible_habitat_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_disconnected_naturally_accessible_habitat_km double precision,
-                    ADD COLUMN IF NOT EXISTS {fish}_total_spawn_km double precision,
-                    ADD COLUMN IF NOT EXISTS {fish}_total_rear_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_total_spawn_km double precision,
+                    --ADD COLUMN IF NOT EXISTS {fish}_total_rear_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_total_habitat_km double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_connectivity_status double precision,
                     ADD COLUMN IF NOT EXISTS {fish}_dci double precision;
@@ -233,12 +235,12 @@ def runStats():
                     {fishaccess_query}  
                     UPDATE {dbTargetSchema}_wcrp.{statTable} 
                     SET
-                        {fish}_connected_naturally_accessible_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_disconnected_naturally_accessible_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_connected_naturally_accessible_rear_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_disconnected_naturally_accessible_rear_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_connected_naturally_accessible_habitat_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_disconnected_naturally_accessible_habitat_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --{fish}_connected_naturally_accessible_spawn_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --,{fish}_disconnected_naturally_accessible_spawn_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --,{fish}_connected_naturally_accessible_rear_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --,{fish}_disconnected_naturally_accessible_rear_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        {fish}_connected_naturally_accessible_habitat_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.ACCESSIBLE.value}' AND habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        ,{fish}_disconnected_naturally_accessible_habitat_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE {fish}_accessibility = '{appconfig.Accessibility.POTENTIAL.value}' AND dci_{fish} = 0 AND habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                     WHERE watershed_id = '{watershed_id}'
                     AND sec_wshed_name ILIKE '{sec_shed}';
 
@@ -246,32 +248,32 @@ def runStats():
                     -- ADD connected and disconnected portions of partially connected streams to measures
                     UPDATE {dbTargetSchema}_wcrp.{statTable} 
                     SET
-                        {fish}_connected_naturally_accessible_spawn_km = 
-                            {fish}_connected_naturally_accessible_spawn_km 
-                            + (SELECT coalesce(sum(con_func_upstr_hab_spawn_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_spawn_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
-                        {fish}_disconnected_naturally_accessible_spawn_km = 
-                            {fish}_disconnected_naturally_accessible_spawn_km 
-                            + (SELECT coalesce(sum(discon_func_upstr_hab_spawn_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_spawn_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
+                        --{fish}_connected_naturally_accessible_spawn_km = 
+                        --    {fish}_connected_naturally_accessible_spawn_km 
+                        --    + (SELECT coalesce(sum(con_func_upstr_hab_spawn_{fish}::numeric) 
+                        --        FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_spawn_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
+                        --{fish}_disconnected_naturally_accessible_spawn_km = 
+                        --    {fish}_disconnected_naturally_accessible_spawn_km 
+                        --    + (SELECT coalesce(sum(discon_func_upstr_hab_spawn_{fish}::numeric) 
+                        --        FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_spawn_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
 
-                        {fish}_connected_naturally_accessible_rear_km = 
-                            {fish}_connected_naturally_accessible_rear_km 
-                            + (SELECT coalesce(sum(con_func_upstr_hab_rear_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_rear_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
-                        {fish}_disconnected_naturally_accessible_rear_km = 
-                            {fish}_disconnected_naturally_accessible_rear_km 
-                            + (SELECT coalesce(sum(discon_func_upstr_hab_rear_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_rear_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
+                        --{fish}_connected_naturally_accessible_rear_km = 
+                        --    {fish}_connected_naturally_accessible_rear_km 
+                        --    + (SELECT coalesce(sum(con_func_upstr_hab_rear_{fish}::numeric) 
+                        --        FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_rear_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
+                        --{fish}_disconnected_naturally_accessible_rear_km = 
+                        --    {fish}_disconnected_naturally_accessible_rear_km 
+                        --    + (SELECT coalesce(sum(discon_func_upstr_hab_rear_{fish}::numeric) 
+                        --        FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_rear_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
 
                        {fish}_connected_naturally_accessible_habitat_km = 
                             {fish}_connected_naturally_accessible_habitat_km 
-                            + (SELECT coalesce(sum(con_func_upstr_hab_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
+                            + (SELECT coalesce(sum(con_func_upstr_hab_{fish}::numeric) 
+                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view),
                        {fish}_disconnected_naturally_accessible_habitat_km = 
                             {fish}_disconnected_naturally_accessible_habitat_km 
-                            + (SELECT coalesce(sum(discon_func_upstr_hab_{fish}) 
-                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view)
+                            + (SELECT coalesce(sum(discon_func_upstr_hab_{fish}::numeric) 
+                                FILTER (WHERE secondary_wshed_name ILIKE '{sec_shed}' AND total_upstr_hab_{fish} > 0 AND dci_{fish} > 0 AND passability_status_{fish} NOT IN ('0','1')), 0) FROM {shed}_wcrp.barrier_passability_view)
                     WHERE watershed_id = '{watershed_id}'
                     AND sec_wshed_name ILIKE '{sec_shed}'; 
                 """
@@ -280,15 +282,15 @@ def runStats():
                     {fishhabitat_query}
                     UPDATE {dbTargetSchema}_wcrp.{statTable}
                     SET
-                        {fish}_total_spawn_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_total_rear_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,{fish}_total_habitat_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --{fish}_total_spawn_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE habitat_spawn_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        --,{fish}_total_rear_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE habitat_rear_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                        {fish}_total_habitat_km = (SELECT coalesce(sum(w_segment_length::numeric) FILTER (WHERE habitat_{fish} = true AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
                         ,{fish}_connectivity_status = 
                             (SELECT 
                                 (
-                                    ({fish}_connected_naturally_accessible_habitat_km) 
-                                        / ({fish}_connected_naturally_accessible_habitat_km + {fish}_disconnected_naturally_accessible_habitat_km)
-                                )*100 
+                                    ({fish}_connected_naturally_accessible_habitat_km::numeric) 
+                                        / ({fish}_connected_naturally_accessible_habitat_km::numeric + {fish}_disconnected_naturally_accessible_habitat_km::numeric)
+                                )*100::numeric
                             FROM {dbTargetSchema}_wcrp.{statTable} 
                             WHERE sec_wshed_name ILIKE '{sec_shed}')
                         ,{fish}_dci = (SELECT coalesce(sum(dci_{fish}) FILTER (WHERE sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
@@ -308,37 +310,31 @@ def runStats():
                 allfishrear = makeHabitatClause(allfishrear, fish, rear=True)
                 allfishhabitat = makeHabitatClause(allfishhabitat, fish, spawn=True, rear=True)
 
-                allfishaccess_query = f"""
-                    UPDATE {dbTargetSchema}_wcrp.{statTable}
-                    SET 
-                        --connected_naturally_accessible_spawn_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccessspawn}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        --,connected_naturally_accessible_rear_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccessrear}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        --,connected_naturally_accessible_habitat_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccesshabitat}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        --,connected_naturally_accessible_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishaccess}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        --,disconnected_naturally_accessible_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishpotentialaccess}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        total_spawn_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishspawn}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,total_rear_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishrear}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        ,total_habitat_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishhabitat}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                        --,disconnected_naturally_accessible_habitat_all_km = (SELECT coalesce(sum(segment_length) FILTER (WHERE ({allfishpotentialaccesshabitat}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                    WHERE watershed_id = '{watershed_id}'
-                    AND sec_wshed_name ILIKE '{sec_shed}';
-                """
+            allfishaccess_query = f"""
+                UPDATE {dbTargetSchema}_wcrp.{statTable}
+                SET 
+                    --total_spawn_all_km = (SELECT coalesce(sum(w_segment_length) FILTER (WHERE ({allfishspawn}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                    --,total_rear_all_km = (SELECT coalesce(sum(w_segment_length) FILTER (WHERE ({allfishrear}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                    total_habitat_all_km = (SELECT coalesce(sum(w_segment_length) FILTER (WHERE ({allfishhabitat}) AND sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                WHERE watershed_id = '{watershed_id}'
+                AND sec_wshed_name ILIKE '{sec_shed}';
+            """
 
-                query = f"""
-                    UPDATE {dbTargetSchema}_wcrp.{statTable} SET total_km =
-                    (SELECT coalesce(sum(segment_length) FILTER (WHERE sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
-                    WHERE watershed_id = '{watershed_id}'
-                    AND sec_wshed_name ILIKE '{sec_shed}';
-                    
-                    {col_query}
-                    {fishaccess_query}
-                    {fishhabitat_query}
-                    {allfishaccess_query}
-                """
-                # print(query)
-                with connection.cursor() as cursor:
-                    cursor.execute(query)
-                    connection.commit()
+            query = f"""
+                UPDATE {dbTargetSchema}_wcrp.{statTable} SET total_km =
+                (SELECT coalesce(sum(w_segment_length) FILTER (WHERE sec_name ILIKE '{sec_shed}'), 0) FROM {shed}.{wsStreamTable})
+                WHERE watershed_id = '{watershed_id}'
+                AND sec_wshed_name ILIKE '{sec_shed}';
+                
+                {col_query}
+                {fishaccess_query}
+                {fishhabitat_query}
+                {allfishaccess_query}
+            """
+            # print(query)
+            with connection.cursor() as cursor:
+                cursor.execute(query)
+                connection.commit()
 
             
 

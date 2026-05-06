@@ -38,8 +38,11 @@ def main():
 
     if iniSection != 'cmm':
         return
+    
+    print("Loading AIS...")
 
     with appconfig.connectdb() as conn:
+        print("     getting nearest stream ids")
         query = f"""
             ALTER TABLE {datatable} ADD COLUMN IF NOT EXISTS stream_id uuid;
 
@@ -72,6 +75,8 @@ def main():
         with conn.cursor() as cursor:
             cursor.execute(query)
         conn.commit()
+
+        print("     assigning upstream ais")
 
         # Assign upstream ais
         query = f"""
@@ -111,6 +116,8 @@ def main():
             cursor.execute(query)
         conn.commit()
 
+        print("     assigning downstream ais")
+
         # Assign downstream ais
         query = f"""
             WITH ais_dnstr AS (
@@ -122,9 +129,15 @@ def main():
                         SELECT id, geometry FROM {iniSection}.{streamTable} WHERE id = CAST(ais.stream_id AS uuid)
                         UNION ALL
                         SELECT n.id, n.geometry
-                        FROM {iniSection}.{streamTable} n, downstream w
-                        WHERE ST_DWithin(ST_EndPoint(w.geometry),ST_StartPoint(n.geometry),0.01)
-                        AND n.id IS NOT NULL
+                        FROM {iniSection}.{streamTable} n
+                        INNER JOIN downstream w 
+                            ON n.geometry && ST_Buffer(ST_EndPoint(w.geometry), 0.0001) -- Uses index
+                            AND ST_DWithin(ST_EndPoint(w.geometry), ST_StartPoint(n.geometry), 0.0001)
+
+
+                        --FROM {iniSection}.{streamTable} n, downstream w
+                        --WHERE ST_DWithin(ST_EndPoint(w.geometry),ST_StartPoint(n.geometry),0.01)
+                        --AND n.id IS NOT NULL
                     )
                     SELECT d.id as stream_id, b.id as barrier_id, b.barrier_cnt_upstr_as
                     FROM downstream d

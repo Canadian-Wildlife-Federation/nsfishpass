@@ -120,8 +120,8 @@ def loadBarrierUpdates(connection):
 
         --ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP COLUMN IF EXISTS update_id;
         --ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD COLUMN update_id uuid default gen_random_uuid();
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey_v1;
-        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey_v1 PRIMARY KEY (update_id);
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} DROP CONSTRAINT IF EXISTS {dbTargetTable}_pkey;
+        ALTER TABLE {dbTargetSchema}.{dbTargetTable} ADD CONSTRAINT {dbTargetTable}_pkey PRIMARY KEY (update_id);
 
     """
     
@@ -319,13 +319,15 @@ def processUpdates(connection):
                 ON b.update_id = u.update_id::varchar
             WHERE u.update_type = 'new feature'
             AND update_status = 'ready';
-
-            UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';
         """
 
         with connection.cursor() as cursor:
             cursor.execute(p_query)
         connection.commit()
+
+    with connection.cursor() as cursor:
+        cursor.execute(f"UPDATE {dbTargetSchema}.{dbTargetTable} SET update_status = 'done' WHERE update_type = 'new feature';")
+    connection.commit()
 
     updatequery = f"""
         UPDATE {dbTargetSchema}.barrier_passability b
@@ -411,7 +413,12 @@ def processUpdates(connection):
         query = f"""
         UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = a.sec_name FROM {appconfig.dataSchema}.{secondaryWatershedTable} a WHERE ST_INTERSECTS(b.snapped_point, a.geometry);
         """
-
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+        connection.commit()
+    else:
+        # defualt to wcrp name
+        query = f"UPDATE {dbTargetSchema}.{dbBarrierTable} b SET secondary_wshed_name = '{iniSection}'"
         with connection.cursor() as cursor:
             cursor.execute(query)
         connection.commit()

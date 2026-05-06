@@ -502,6 +502,7 @@ def writeResults(connection):
         tablestr = tablestr + ', func_upstr_hab_rear_' + fish + ' double precision'
         tablestr = tablestr + ', func_upstr_hab_' + fish + ' double precision'
         tablestr = tablestr + ', dci_' + fish + ' double precision'
+        # weighted habitat
         tablestr = tablestr + ', w_total_upstr_hab_' + fish + ' double precision' # weighted habitat
         tablestr = tablestr + ', w_func_upstr_hab_' + fish + ' double precision' # weighted habitat
         inserttablestr = inserttablestr + ",%s,%s,%s,%s,%s,%s,%s,%s,%s,%s"
@@ -547,6 +548,7 @@ def writeResults(connection):
             data.append (edge.rear_funchabitatup[fish])
             data.append (edge.funchabitatup[fish])
             data.append (edge.dci[fish])
+            # weighted habitat
             data.append(edge.w_habitatup[fish]) # weighted habitat
             data.append(edge.w_funchabitatup[fish]) # weighted habitat
         

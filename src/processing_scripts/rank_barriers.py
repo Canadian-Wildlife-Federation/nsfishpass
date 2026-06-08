@@ -291,7 +291,7 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     WITH sorted AS (
         SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,passability_status
-            ,ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
+            ,ROW_NUMBER() OVER(ORDER BY COALESCE(barrier_cnt_downstr_{species_code}, 0), w_avg_gain_per_barrier DESC) as row_num
         FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
         WHERE w_avg_gain_per_barrier >= 0.5
         UNION ALL
@@ -299,20 +299,20 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
         SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,passability_status
             ,(SELECT MAX(row_num) FROM (
-                SELECT ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num
+                SELECT ROW_NUMBER() OVER(ORDER BY COALESCE(barrier_cnt_downstr_{species_code}, 0), w_avg_gain_per_barrier DESC) as row_num
                 FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
                 WHERE w_avg_gain_per_barrier >= 0.5
-            ) AS subquery) + ROW_NUMBER() OVER(ORDER BY barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC) as row_num 
+            ) AS subquery) + ROW_NUMBER() OVER(ORDER BY COALESCE(barrier_cnt_downstr_{species_code}, 0), w_avg_gain_per_barrier DESC) as row_num 
         FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
         WHERE w_avg_gain_per_barrier < 0.5
         
     ),
     ranks AS (
         SELECT id
-            ,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as ranks
-            ,FIRST_VALUE(barrier_cnt_downstr_{species_code}) OVER (PARTITION BY group_id ORDER BY barrier_cnt_downstr_{species_code}) as tier
+            ,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY COALESCE(barrier_cnt_downstr_{species_code}, 0)) as ranks
+            ,FIRST_VALUE(COALESCE(barrier_cnt_downstr_{species_code}, 0)) OVER (PARTITION BY group_id ORDER BY COALESCE(barrier_cnt_downstr_{species_code}, 0)) as tier
         FROM sorted
-        ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
+        ORDER BY group_id, COALESCE(barrier_cnt_downstr_{species_code}, 0), w_avg_gain_per_barrier DESC
     )
     UPDATE {wcrp}.ranked_barriers_{species_code}_{watershed} 
     SET rank_w_avg_gain_tiered = ranks.ranks                                -- assign all barriers in group the same rank based on sorting above
@@ -324,18 +324,18 @@ def rank_barriers(wcrp, watershed, watershed_name, species_code, conn):
     ADD rank_w_total_upstr_hab numeric;
 
     WITH sorted AS (
-        SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
+        SELECT id, group_id, barrier_cnt_upstr_{species_code}, COALESCE(barrier_cnt_downstr_{species_code}, 0) as barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,ROW_NUMBER() OVER(ORDER BY w_total_upstr_hab_{species_code} DESC) as row_num
         FROM {wcrp}.ranked_barriers_{species_code}_{watershed}
     ),
     ranks AS (
-        SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
+        SELECT id, group_id, barrier_cnt_upstr_{species_code}, COALESCE(barrier_cnt_downstr_{species_code}, 0) as barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,FIRST_VALUE(row_num) OVER(PARTITION BY group_id ORDER BY row_num) as relative_rank
         FROM sorted
         ORDER BY group_id, barrier_cnt_downstr_{species_code}, w_avg_gain_per_barrier DESC
     ),
     densify AS (
-        SELECT id, group_id, barrier_cnt_upstr_{species_code}, barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
+        SELECT id, group_id, barrier_cnt_upstr_{species_code}, COALESCE(barrier_cnt_downstr_{species_code}, 0) as barrier_cnt_downstr_{species_code}, w_total_upstr_hab_{species_code}, w_total_hab_gain_group, w_avg_gain_per_barrier
             ,DENSE_RANK() OVER(ORDER BY relative_rank) as ranks
         FROM ranks
     )
